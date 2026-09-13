@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -494,30 +495,7 @@ class _PosPageState extends State<PosPage> {
                                 children: [
                                   Row(
                                     children: [
-                                      Container(
-                                        width: isCompact ? 28 : 38,
-                                        height: isCompact ? 28 : 38,
-                                        decoration: BoxDecoration(
-                                          color: [
-                                            const Color(0xFFF0EDE5),
-                                            const Color(0xFFEAF0E8),
-                                            const Color(0xFFE9EDF2),
-                                            const Color(0xFFF6EAE0),
-                                          ][index % 4],
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                        child: Icon(
-                                          categoryIcon('${p['category']}'),
-                                          color: [
-                                            const Color(0xFF938363),
-                                            green,
-                                            const Color(0xFF637891),
-                                            accent,
-                                          ][index % 4],
-                                          size: isCompact ? 17 : 23,
-                                        ),
-                                      ),
+                                      _productThumbnail(p, index, isCompact),
                                       const Spacer(),
                                       if (isCompact)
                                         Container(
@@ -2314,4 +2292,76 @@ class _PosPageState extends State<PosPage> {
       ),
     );
   }
+
+  Widget _productThumbnail(
+    Map<String, dynamic> p,
+    int index,
+    bool isCompact,
+  ) {
+    final size = isCompact ? 28.0 : 38.0;
+    final rawImage = p['image'] as String?;
+    if (rawImage != null && rawImage.trim().isNotEmpty) {
+      try {
+        final clean = rawImage.contains(',')
+            ? rawImage.split(',').last.trim()
+            : rawImage.trim();
+        final bytes = base64Decode(clean);
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: lineColor),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: Image.memory(
+              bytes,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) =>
+                  _defaultThumbnailIcon(p, index, isCompact),
+            ),
+          ),
+        );
+      } catch (_) {
+        // Fall back gracefully to category icon if base64 decode fails
+      }
+    }
+    return _defaultThumbnailIcon(p, index, isCompact);
+  }
+
+  Widget _defaultThumbnailIcon(
+    Map<String, dynamic> p,
+    int index,
+    bool isCompact,
+  ) {
+    final size = isCompact ? 28.0 : 38.0;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: [
+          const Color(0xFFF0EDE5),
+          const Color(0xFFEAF0E8),
+          const Color(0xFFE9EDF2),
+          const Color(0xFFF6EAE0),
+        ][index % 4],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        categoryIcon('${p['category']}'),
+        color: [
+          const Color(0xFF938363),
+          green,
+          const Color(0xFF637891),
+          accent,
+        ][index % 4],
+        size: isCompact ? 17 : 23,
+      ),
+    );
+  }
 }
+

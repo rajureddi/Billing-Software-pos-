@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../data/app_store.dart';
 import 'common.dart';
@@ -487,10 +490,12 @@ Future<void> editProduct(
   };
   final existingCats = store.categories;
   String? selectedDropdownCat = existingCats.firstWhere(
-    (c) => c.toLowerCase() == controllers['category']!.text.trim().toLowerCase(),
+    (c) =>
+        c.toLowerCase() == controllers['category']!.text.trim().toLowerCase(),
     orElse: () => '',
   );
   if (selectedDropdownCat.isEmpty) selectedDropdownCat = null;
+  String? imageBase64 = p['image'] as String?;
   var saving = false;
   await showDialog(
     context: context,
@@ -504,6 +509,197 @@ Future<void> editProduct(
               mainAxisSize: MainAxisSize.min,
               children: [
                 field('Product name', controllers['name']!),
+                Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: canvas,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: lineColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: lineColor),
+                        ),
+                        child: imageBase64 != null &&
+                                imageBase64!.trim().isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(7),
+                                child: Image.memory(
+                                  base64Decode(
+                                    imageBase64!.contains(',')
+                                        ? imageBase64!.split(',').last.trim()
+                                        : imageBase64!.trim(),
+                                  ),
+                                  fit: BoxFit.cover,
+                                  width: 58,
+                                  height: 58,
+                                  errorBuilder: (_, _, _) => const Icon(
+                                    Icons.broken_image_outlined,
+                                    color: muted,
+                                    size: 24,
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.image_outlined,
+                                color: muted,
+                                size: 26,
+                              ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Product image (POS only)',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Take photo with camera or upload file',
+                              style: TextStyle(fontSize: 10, color: muted),
+                            ),
+                            const SizedBox(height: 6),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    try {
+                                      final picker = ImagePicker();
+                                      final picked = await picker.pickImage(
+                                        source: ImageSource.camera,
+                                        maxWidth: 512,
+                                        maxHeight: 512,
+                                        imageQuality: 75,
+                                      );
+                                      if (picked != null) {
+                                        final bytes =
+                                            await picked.readAsBytes();
+                                        set(() {
+                                          imageBase64 = base64Encode(bytes);
+                                        });
+                                      }
+                                    } catch (_) {
+                                      final result = await FilePicker.pickFile(
+                                        type: FileType.custom,
+                                        allowedExtensions: [
+                                          'png',
+                                          'jpg',
+                                          'jpeg',
+                                          'webp',
+                                        ],
+                                      );
+                                      if (result != null) {
+                                        final bytes =
+                                            await result.readAsBytes();
+                                        set(() {
+                                          imageBase64 = base64Encode(bytes);
+                                        });
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(
+                                    Icons.photo_camera_outlined,
+                                    size: 14,
+                                  ),
+                                  label: const Text(
+                                    'Take photo',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    try {
+                                      final picker = ImagePicker();
+                                      final picked = await picker.pickImage(
+                                        source: ImageSource.gallery,
+                                        maxWidth: 512,
+                                        maxHeight: 512,
+                                        imageQuality: 75,
+                                      );
+                                      if (picked != null) {
+                                        final bytes =
+                                            await picked.readAsBytes();
+                                        set(() {
+                                          imageBase64 = base64Encode(bytes);
+                                        });
+                                      }
+                                    } catch (_) {
+                                      final result = await FilePicker.pickFile(
+                                        type: FileType.custom,
+                                        allowedExtensions: [
+                                          'png',
+                                          'jpg',
+                                          'jpeg',
+                                          'webp',
+                                        ],
+                                      );
+                                      if (result != null) {
+                                        final bytes =
+                                            await result.readAsBytes();
+                                        set(() {
+                                          imageBase64 = base64Encode(bytes);
+                                        });
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(
+                                    Icons.folder_open_outlined,
+                                    size: 14,
+                                  ),
+                                  label: const Text(
+                                    'Upload file',
+                                    style: TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                                if (imageBase64 != null &&
+                                    imageBase64!.trim().isNotEmpty)
+                                  IconButton(
+                                    tooltip: 'Remove image',
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(
+                                      Icons.close,
+                                      size: 16,
+                                      color: Color(0xFFC74343),
+                                    ),
+                                    onPressed: () =>
+                                        set(() => imageBase64 = null),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 field('Product code (optional)', controllers['code']!),
                 UnitSelector(
                   controller: controllers['unit']!,
@@ -748,6 +944,10 @@ Future<void> editProduct(
                           if (key != 'openingStock')
                             key: controllers[key]!.text.trim(),
                         'category': store.normalizeCategory(rawCat),
+                        'image': (imageBase64 != null &&
+                                imageBase64!.trim().isNotEmpty)
+                            ? imageBase64
+                            : null,
                       };
                       for (final key in ['price', 'gst', 'lowStock']) {
                         data[key] = double.parse(controllers[key]!.text);
