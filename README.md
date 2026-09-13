@@ -145,6 +145,33 @@ flutter build web --release
 
 ---
 
+## 🌐 Deploying Web Version to Vercel
+
+Yes! You can deploy the web version to **Vercel** with full Single Page Application (SPA) routing support.
+
+### Option A: Instant CLI Deploy (Quickest & Simplest)
+Once you have built the web release:
+```bash
+flutter build web --release
+npx vercel deploy build/web --prod
+```
+- When prompted, log in with your Vercel account or GitHub.
+- Your live production URL (e.g. `https://srs-agencies.vercel.app`) will be generated immediately!
+
+### Option B: Automatic Deployment via Vercel Dashboard (Git Integration)
+1. Go to your [Vercel Dashboard](https://vercel.com/new).
+2. Click **Add New…** > **Project** and select your GitHub repository: `Billing-Software-pos-`.
+3. In **Build and Output Settings**:
+   - **Framework Preset**: Select `Other`.
+   - **Build Command**: `bash vercel-build.sh` (pre-configured script that installs Flutter & compiles the web app).
+   - **Output Directory**: `build/web`.
+4. Click **Deploy**. Vercel will automatically build and publish your web POS app!
+
+### Option C: Continuous Deployment via GitHub Actions
+A pre-configured GitHub Actions workflow [`.github/workflows/deploy.yml`](file:///.github/workflows/deploy.yml) is included. Every push to `main` automatically runs unit tests, compiles Flutter Web, and publishes to Vercel.
+
+---
+
 ## 🧪 Testing & Verification
 
 The project includes an automated test suite covering billing calculations, GST logic, discounts, storage reversals, and PDF generation:
