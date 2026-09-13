@@ -464,7 +464,7 @@ class _PosPageState extends State<PosPage> {
                     builder: (context, c) => GridView.builder(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: (c.maxWidth / 160).floor().clamp(2, 6),
-                        mainAxisExtent: isCompact ? 134 : 178,
+                        mainAxisExtent: isCompact ? 186 : 228,
                         crossAxisSpacing: isCompact ? 8 : 12,
                         mainAxisSpacing: isCompact ? 8 : 12,
                       ),
@@ -482,7 +482,6 @@ class _PosPageState extends State<PosPage> {
                             onTap: () => addProduct(p),
                             borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              padding: EdgeInsets.all(isCompact ? 10 : 14),
                               decoration: BoxDecoration(
                                 border: Border.all(
                                   color: selected ? accent : lineColor,
@@ -493,101 +492,91 @@ class _PosPageState extends State<PosPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      _productThumbnail(p, index, isCompact),
-                                      const Spacer(),
-                                      if (isCompact)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 5,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                stock <= number(p['lowStock'])
-                                                    ? accent.withValues(
-                                                        alpha: 0.1,
-                                                      )
-                                                    : canvas,
-                                            borderRadius:
-                                                BorderRadius.circular(5),
-                                          ),
-                                          child: Text(
-                                            '${quantity(stock)} ${p['unit']}',
+                                  _productHeaderImage(
+                                    p: p,
+                                    index: index,
+                                    isCompact: isCompact,
+                                    stock: stock,
+                                    selected: selected,
+                                  ),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: EdgeInsets.fromLTRB(
+                                        isCompact ? 9 : 12,
+                                        isCompact ? 7 : 10,
+                                        isCompact ? 9 : 12,
+                                        isCompact ? 7 : 10,
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '${p['name']}',
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w600,
-                                              color:
-                                                  stock <= number(p['lowStock'])
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: isCompact ? 11 : 13,
+                                              height: 1.2,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          if (!isCompact) ...[
+                                            Text(
+                                              '${quantity(stock)} ${p['unit']} in stock',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: stock <=
+                                                        number(p['lowStock'])
+                                                    ? accent
+                                                    : muted,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                          ],
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: FittedBox(
+                                                  fit: BoxFit.scaleDown,
+                                                  alignment:
+                                                      Alignment.centerLeft,
+                                                  child: Text(
+                                                    money(p['price']),
+                                                    style: TextStyle(
+                                                      fontSize: isCompact
+                                                          ? 14
+                                                          : 16,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                              Container(
+                                                width: isCompact ? 24 : 28,
+                                                height: isCompact ? 24 : 28,
+                                                decoration: BoxDecoration(
+                                                  color: selected
                                                       ? accent
-                                                      : muted,
-                                            ),
+                                                      : canvas,
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Icon(
+                                                  Icons.add,
+                                                  size: isCompact ? 15 : 18,
+                                                  color: selected
+                                                      ? Colors.white
+                                                      : ink,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ),
-                                      if (selected) ...[
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          Icons.check_circle,
-                                          color: accent,
-                                          size: 16,
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  SizedBox(height: isCompact ? 6 : 10),
-                                  Text(
-                                    '${p['name']}',
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: isCompact ? 11 : 12,
-                                      height: 1.2,
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  if (!isCompact)
-                                    Text(
-                                      '${quantity(stock)} ${p['unit']} in stock',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: stock <= number(p['lowStock'])
-                                            ? accent
-                                            : muted,
+                                        ],
                                       ),
                                     ),
-                                  if (!isCompact) const SizedBox(height: 6),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          alignment: Alignment.centerLeft,
-                                          child: Text(
-                                            money(p['price']),
-                                            style: TextStyle(
-                                              fontSize: isCompact ? 14 : 16,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Container(
-                                        width: isCompact ? 24 : 26,
-                                        height: isCompact ? 24 : 26,
-                                        decoration: BoxDecoration(
-                                          color: selected ? accent : canvas,
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Icon(
-                                          Icons.add,
-                                          size: isCompact ? 15 : 17,
-                                          color: selected ? Colors.white : ink,
-                                        ),
-                                      ),
-                                    ],
                                   ),
                                 ],
                               ),
@@ -2293,73 +2282,131 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
-  Widget _productThumbnail(
-    Map<String, dynamic> p,
-    int index,
-    bool isCompact,
-  ) {
-    final size = isCompact ? 28.0 : 38.0;
+  Widget _productHeaderImage({
+    required Map<String, dynamic> p,
+    required int index,
+    required bool isCompact,
+    required double stock,
+    required bool selected,
+  }) {
     final rawImage = p['image'] as String?;
-    if (rawImage != null && rawImage.trim().isNotEmpty) {
+    final hasImage = rawImage != null && rawImage.trim().isNotEmpty;
+    final imageHeight = isCompact ? 88.0 : 118.0;
+
+    Widget imageContent;
+    if (hasImage) {
       try {
         final clean = rawImage.contains(',')
             ? rawImage.split(',').last.trim()
             : rawImage.trim();
         final bytes = base64Decode(clean);
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: lineColor),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(7),
-            child: Image.memory(
-              bytes,
-              width: size,
-              height: size,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              errorBuilder: (_, _, _) =>
-                  _defaultThumbnailIcon(p, index, isCompact),
-            ),
-          ),
+        imageContent = Image.memory(
+          bytes,
+          width: double.infinity,
+          height: double.infinity,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => _defaultHeaderIcon(p, index, isCompact),
         );
       } catch (_) {
-        // Fall back gracefully to category icon if base64 decode fails
+        imageContent = _defaultHeaderIcon(p, index, isCompact);
       }
+    } else {
+      imageContent = _defaultHeaderIcon(p, index, isCompact);
     }
-    return _defaultThumbnailIcon(p, index, isCompact);
+
+    final lowStock = stock <= number(p['lowStock']);
+
+    return SizedBox(
+      height: imageHeight,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+            child: imageContent,
+          ),
+          Positioned(
+            top: 6,
+            right: 6,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: lowStock
+                    ? accent.withValues(alpha: 0.92)
+                    : Colors.black.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(6),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Text(
+                '${quantity(stock)} ${p['unit']}',
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+          if (selected)
+            Positioned(
+              top: 6,
+              left: 6,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.check,
+                  color: Colors.white,
+                  size: 13,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
-  Widget _defaultThumbnailIcon(
+  Widget _defaultHeaderIcon(
     Map<String, dynamic> p,
     int index,
     bool isCompact,
   ) {
-    final size = isCompact ? 28.0 : 38.0;
     return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: [
-          const Color(0xFFF0EDE5),
-          const Color(0xFFEAF0E8),
-          const Color(0xFFE9EDF2),
-          const Color(0xFFF6EAE0),
-        ][index % 4],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(
-        categoryIcon('${p['category']}'),
-        color: [
-          const Color(0xFF938363),
-          green,
-          const Color(0xFF637891),
-          accent,
-        ][index % 4],
-        size: isCompact ? 17 : 23,
+      color: [
+        const Color(0xFFF0EDE5),
+        const Color(0xFFEAF0E8),
+        const Color(0xFFE9EDF2),
+        const Color(0xFFF6EAE0),
+      ][index % 4],
+      child: Center(
+        child: Icon(
+          categoryIcon('${p['category']}'),
+          color: [
+            const Color(0xFF938363),
+            green,
+            const Color(0xFF637891),
+            accent,
+          ][index % 4],
+          size: isCompact ? 30 : 40,
+        ),
       ),
     );
   }

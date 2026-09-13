@@ -520,17 +520,17 @@ Future<void> editProduct(
                   child: Row(
                     children: [
                       Container(
-                        width: 58,
-                        height: 58,
+                        width: 88,
+                        height: 88,
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: lineColor),
                         ),
                         child: imageBase64 != null &&
                                 imageBase64!.trim().isNotEmpty
                             ? ClipRRect(
-                                borderRadius: BorderRadius.circular(7),
+                                borderRadius: BorderRadius.circular(9),
                                 child: Image.memory(
                                   base64Decode(
                                     imageBase64!.contains(',')
@@ -538,22 +538,22 @@ Future<void> editProduct(
                                         : imageBase64!.trim(),
                                   ),
                                   fit: BoxFit.cover,
-                                  width: 58,
-                                  height: 58,
+                                  width: 88,
+                                  height: 88,
                                   errorBuilder: (_, _, _) => const Icon(
                                     Icons.broken_image_outlined,
                                     color: muted,
-                                    size: 24,
+                                    size: 32,
                                   ),
                                 ),
                               )
                             : const Icon(
                                 Icons.image_outlined,
                                 color: muted,
-                                size: 26,
+                                size: 36,
                               ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -562,7 +562,7 @@ Future<void> editProduct(
                               'Product image (POS only)',
                               style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                fontSize: 12,
+                                fontSize: 13,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -570,7 +570,7 @@ Future<void> editProduct(
                               'Take photo with camera or upload file',
                               style: TextStyle(fontSize: 10, color: muted),
                             ),
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8),
                             Wrap(
                               spacing: 6,
                               runSpacing: 6,
@@ -588,9 +588,9 @@ Future<void> editProduct(
                                       final picker = ImagePicker();
                                       final picked = await picker.pickImage(
                                         source: ImageSource.camera,
-                                        maxWidth: 512,
-                                        maxHeight: 512,
-                                        imageQuality: 75,
+                                        maxWidth: 1024,
+                                        maxHeight: 1024,
+                                        imageQuality: 85,
                                       );
                                       if (picked != null) {
                                         final bytes =
@@ -640,9 +640,9 @@ Future<void> editProduct(
                                       final picker = ImagePicker();
                                       final picked = await picker.pickImage(
                                         source: ImageSource.gallery,
-                                        maxWidth: 512,
-                                        maxHeight: 512,
-                                        imageQuality: 75,
+                                        maxWidth: 1024,
+                                        maxHeight: 1024,
+                                        imageQuality: 85,
                                       );
                                       if (picked != null) {
                                         final bytes =
