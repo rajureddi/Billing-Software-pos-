@@ -307,9 +307,9 @@ class ShopShell extends ConsumerWidget {
                   child: Column(
                     children: [
                       Container(
-                        height: 77,
+                        height: wide ? 64 : 52,
                         padding: EdgeInsets.symmetric(
-                          horizontal: wide ? 30 : 18,
+                          horizontal: wide ? 28 : 14,
                         ),
                         decoration: const BoxDecoration(
                           color: Colors.white,
@@ -320,9 +320,9 @@ class ShopShell extends ConsumerWidget {
                             if (!wide) ...[
                               InkWell(
                                 onTap: () => context.go('/landing'),
-                                child: srsLogoWidget(size: 34, radius: 8),
+                                child: srsLogoWidget(size: 28, radius: 7),
                               ),
-                              const SizedBox(width: 10),
+                              const SizedBox(width: 8),
                             ],
                             Expanded(
                               child: InkWell(
@@ -336,19 +336,21 @@ class ShopShell extends ConsumerWidget {
                                       '${store.settings['name'] ?? 'SRS AGENCIES'}',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontWeight: FontWeight.w700,
-                                        fontSize: 14,
+                                        fontSize: wide ? 14 : 13,
                                       ),
                                     ),
-                                    const SizedBox(height: 3),
+                                    const SizedBox(height: 2),
                                     Text(
                                       '${store.settings['category'] ?? ''}'
                                               .isEmpty
                                           ? 'Your everyday retail workspace'
                                           : '${store.settings['category']}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                        fontSize: 11,
+                                        fontSize: 10,
                                         color: muted,
                                       ),
                                     ),
@@ -404,18 +406,18 @@ class ShopShell extends ConsumerWidget {
                                   );
                                 },
                               ),
-                            const SizedBox(width: 16),
+                            SizedBox(width: wide ? 16 : 8),
                             Container(
-                              width: 35,
-                              height: 35,
+                              width: wide ? 35 : 30,
+                              height: wide ? 35 : 30,
                               decoration: BoxDecoration(
                                 color: const Color(0xFFE8EEE5),
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.person_outline_rounded,
                                 color: green,
-                                size: 20,
+                                size: wide ? 20 : 17,
                               ),
                             ),
                             if (wide)

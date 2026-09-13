@@ -50,8 +50,9 @@ class _InventoryPageState extends State<InventoryPage> {
     final shortageCount =
         all.where((p) => widget.store.stockFor(p['id']) < 0).length;
 
+    final isCompact = MediaQuery.sizeOf(context).width < 700;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(isCompact ? 14 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

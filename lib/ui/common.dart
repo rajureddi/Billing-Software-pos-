@@ -60,44 +60,55 @@ class PageHeading extends StatelessWidget {
   final String title, subtitle;
   final Widget? action;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 24),
-    child: LayoutBuilder(
-      builder: (context, constraints) {
-        final text = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1,
+  Widget build(BuildContext context) {
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isCompact = screenW < 700;
+    return Padding(
+      padding: EdgeInsets.only(bottom: isCompact ? 14 : 24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isSmall = constraints.maxWidth < 650 || isCompact;
+          final text = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: isSmall ? 20 : 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: isSmall ? -0.5 : -1,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(subtitle, style: const TextStyle(color: muted, fontSize: 13)),
-          ],
-        );
-        final isPortrait =
-            MediaQuery.orientationOf(context) == Orientation.portrait;
-        return (isPortrait || constraints.maxWidth < 850)
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  text,
-                  if (action != null) ...[const SizedBox(height: 14), action!],
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(child: text),
-                  ?action,
-                ],
-              );
-      },
-    ),
-  );
+              SizedBox(height: isSmall ? 3 : 6),
+              Text(
+                subtitle,
+                style: TextStyle(color: muted, fontSize: isSmall ? 11 : 13),
+              ),
+            ],
+          );
+          final isPortrait =
+              MediaQuery.orientationOf(context) == Orientation.portrait;
+          return (isPortrait || constraints.maxWidth < 850)
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    text,
+                    if (action != null) ...[
+                      SizedBox(height: isSmall ? 10 : 14),
+                      action!,
+                    ],
+                  ],
+                )
+              : Row(
+                  children: [
+                    Expanded(child: text),
+                    ?action,
+                  ],
+                );
+        },
+      ),
+    );
+  }
 }
 
 class Pill extends StatelessWidget {

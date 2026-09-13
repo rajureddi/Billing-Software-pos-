@@ -88,8 +88,9 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final cloud = cloudFor(widget.store);
+    final isCompact = MediaQuery.sizeOf(context).width < 700;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(isCompact ? 14 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

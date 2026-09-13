@@ -53,8 +53,9 @@ class _DashboardPageState extends State<DashboardPage> {
         .toList();
     final recent = [...store.invoices]
       ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
+    final isCompact = MediaQuery.sizeOf(context).width < 700;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(28),
+      padding: EdgeInsets.all(isCompact ? 14 : 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

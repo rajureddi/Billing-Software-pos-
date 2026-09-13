@@ -109,7 +109,7 @@ class _PosPageState extends State<PosPage> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 1180;
+    final wide = MediaQuery.sizeOf(context).width >= 1000;
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
         const SingleActivator(LogicalKeyboardKey.keyN, control: true):
@@ -171,7 +171,7 @@ class _PosPageState extends State<PosPage> {
                       Expanded(child: mobileCart ? cart : catalog),
                       if (!mobileCart)
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 8, 18, 14),
+                          padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
                           child: SizedBox(
                             width: double.infinity,
                             child: FilledButton.icon(
@@ -210,98 +210,222 @@ class _PosPageState extends State<PosPage> {
               ),
         )
         .toList();
+
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isCompact = screenW < 750;
+
     return Padding(
-      padding: const EdgeInsets.all(26),
+      padding: EdgeInsets.fromLTRB(
+        isCompact ? 12 : 24,
+        isCompact ? 10 : 20,
+        isCompact ? 12 : 24,
+        isCompact ? 4 : 20,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          PageHeading(
-            'Point of sale',
-            'Good service starts with a simple bill.',
-            action: OutlinedButton.icon(
-              onPressed: () => editLine(),
-              icon: const Icon(Icons.add, size: 17),
-              label: const Text('Custom / Loose item (F1)'),
+          if (isCompact) ...[
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Point of sale',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.5,
+                    ),
+                  ),
+                ),
+                FilledButton.tonalIcon(
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                  ),
+                  onPressed: () => editLine(),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text(
+                    'Custom item (F1)',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
             ),
-          ),
+            const SizedBox(height: 8),
+          ] else ...[
+            PageHeading(
+              'Point of sale',
+              'Good service starts with a simple bill.',
+              action: OutlinedButton.icon(
+                onPressed: () => editLine(),
+                icon: const Icon(Icons.add, size: 17),
+                label: const Text('Custom / Loose item (F1)'),
+              ),
+            ),
+          ],
           TextField(
             onChanged: (v) => setState(() => search = v),
-            decoration: const InputDecoration(
-              hintText: 'Search your products by name or code…',
-              prefixIcon: Icon(Icons.search_rounded, size: 21),
+            decoration: InputDecoration(
+              isDense: isCompact,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: isCompact ? 9 : 14,
+              ),
+              hintText: 'Search products by name or code…',
+              prefixIcon: Icon(Icons.search_rounded, size: isCompact ? 19 : 21),
             ),
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: isCompact ? 8 : 16),
           SizedBox(
-            height: 81,
-            child: ListView(
+            height: isCompact ? 36 : 72,
+            child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              children: [
-                for (final c in cats)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 9),
-                    child: Material(
-                      color: category == c ? ink : Colors.white,
-                      borderRadius: BorderRadius.circular(11),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(11),
-                        onTap: () => setState(() => category = c),
-                        child: Container(
-                          constraints: const BoxConstraints(minWidth: 92),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 13,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: category == c ? ink : lineColor,
+              itemCount: cats.length,
+              separatorBuilder: (_, _) => SizedBox(width: isCompact ? 6 : 9),
+              itemBuilder: (context, index) {
+                final c = cats[index];
+                final isSel = category == c;
+                final catCount = c == 'All items'
+                    ? all.length
+                    : all
+                        .where(
+                          (p) =>
+                              '${p['category']}'.toLowerCase() ==
+                              c.toLowerCase(),
+                        )
+                        .length;
+                if (isCompact) {
+                  return Material(
+                    color: isSel ? ink : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () => setState(() => category = c),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: isSel ? ink : lineColor),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              c == 'All items'
+                                  ? Icons.apps_rounded
+                                  : categoryIcon(c),
+                              size: 14,
+                              color: isSel ? Colors.white : muted,
                             ),
-                            borderRadius: BorderRadius.circular(11),
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                c == 'All items'
-                                    ? Icons.apps_rounded
-                                    : categoryIcon(c),
-                                color: category == c ? Colors.white : muted,
-                                size: 22,
+                            const SizedBox(width: 6),
+                            Text(
+                              c,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight:
+                                    isSel ? FontWeight.w700 : FontWeight.w500,
+                                color: isSel ? Colors.white : ink,
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                c,
+                            ),
+                            const SizedBox(width: 5),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSel
+                                    ? Colors.white.withValues(alpha: 0.2)
+                                    : canvas,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '$catCount',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.w600,
                                   fontSize: 10,
-                                  color: category == c ? Colors.white : ink,
+                                  fontWeight: FontWeight.w600,
+                                  color: isSel ? Colors.white : muted,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
+                  );
+                }
+                return Material(
+                  color: isSel ? ink : Colors.white,
+                  borderRadius: BorderRadius.circular(11),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(11),
+                    onTap: () => setState(() => category = c),
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 84),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: isSel ? ink : lineColor),
+                        borderRadius: BorderRadius.circular(11),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            c == 'All items'
+                                ? Icons.apps_rounded
+                                : categoryIcon(c),
+                            color: isSel ? Colors.white : muted,
+                            size: 20,
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            c,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                              color: isSel ? Colors.white : ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-              ],
+                );
+              },
             ),
           ),
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Text(
-                category,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+          if (!isCompact) ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text(
+                  category,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Pill('${items.length}', color: muted),
-              const Spacer(),
-              const Icon(Icons.grid_view_rounded, size: 16, color: muted),
-            ],
-          ),
-          const SizedBox(height: 14),
+                const SizedBox(width: 8),
+                Pill('${items.length}', color: muted),
+                const Spacer(),
+                const Icon(Icons.grid_view_rounded, size: 16, color: muted),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ] else ...[
+            const SizedBox(height: 8),
+          ],
           Expanded(
             child: items.isEmpty
                 ? SingleChildScrollView(
@@ -326,7 +450,8 @@ class _PosPageState extends State<PosPage> {
                               onPressed: () => perform(
                                 context,
                                 () => widget.store.seedCatalog(),
-                                success: 'Sample catalog added. Review prices before selling.',
+                                success:
+                                    'Sample catalog added. Review prices before selling.',
                               ),
                               child: const Text('Try sample catalog'),
                             ),
@@ -337,10 +462,10 @@ class _PosPageState extends State<PosPage> {
                 : LayoutBuilder(
                     builder: (context, c) => GridView.builder(
                       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: (c.maxWidth / 175).floor().clamp(2, 6),
-                        mainAxisExtent: 192,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
+                        crossAxisCount: (c.maxWidth / 160).floor().clamp(2, 6),
+                        mainAxisExtent: isCompact ? 134 : 178,
+                        crossAxisSpacing: isCompact ? 8 : 12,
+                        mainAxisSpacing: isCompact ? 8 : 12,
                       ),
                       itemCount: items.length,
                       itemBuilder: (context, index) {
@@ -351,18 +476,18 @@ class _PosPageState extends State<PosPage> {
                         );
                         return Material(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(12),
                           child: InkWell(
                             onTap: () => addProduct(p),
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(12),
                             child: Container(
-                              padding: const EdgeInsets.all(15),
+                              padding: EdgeInsets.all(isCompact ? 10 : 14),
                               decoration: BoxDecoration(
                                 border: Border.all(
                                   color: selected ? accent : lineColor,
-                                  width: selected ? 1.4 : 1,
+                                  width: selected ? 1.5 : 1,
                                 ),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,8 +495,8 @@ class _PosPageState extends State<PosPage> {
                                   Row(
                                     children: [
                                       Container(
-                                        width: 43,
-                                        height: 43,
+                                        width: isCompact ? 28 : 38,
+                                        height: isCompact ? 28 : 38,
                                         decoration: BoxDecoration(
                                           color: [
                                             const Color(0xFFF0EDE5),
@@ -379,9 +504,8 @@ class _PosPageState extends State<PosPage> {
                                             const Color(0xFFE9EDF2),
                                             const Color(0xFFF6EAE0),
                                           ][index % 4],
-                                          borderRadius: BorderRadius.circular(
-                                            10,
-                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         child: Icon(
                                           categoryIcon('${p['category']}'),
@@ -391,39 +515,71 @@ class _PosPageState extends State<PosPage> {
                                             const Color(0xFF637891),
                                             accent,
                                           ][index % 4],
-                                          size: 26,
+                                          size: isCompact ? 17 : 23,
                                         ),
                                       ),
                                       const Spacer(),
-                                      if (selected)
+                                      if (isCompact)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                stock <= number(p['lowStock'])
+                                                    ? accent.withValues(
+                                                        alpha: 0.1,
+                                                      )
+                                                    : canvas,
+                                            borderRadius:
+                                                BorderRadius.circular(5),
+                                          ),
+                                          child: Text(
+                                            '${quantity(stock)} ${p['unit']}',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w600,
+                                              color:
+                                                  stock <= number(p['lowStock'])
+                                                      ? accent
+                                                      : muted,
+                                            ),
+                                          ),
+                                        ),
+                                      if (selected) ...[
+                                        const SizedBox(width: 4),
                                         const Icon(
                                           Icons.check_circle,
                                           color: accent,
-                                          size: 18,
+                                          size: 16,
                                         ),
+                                      ],
                                     ],
                                   ),
-                                  const SizedBox(height: 13),
+                                  SizedBox(height: isCompact ? 6 : 10),
                                   Text(
                                     '${p['name']}',
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w700,
-                                      fontSize: 12,
+                                      fontSize: isCompact ? 11 : 12,
+                                      height: 1.2,
                                     ),
                                   ),
                                   const Spacer(),
-                                  Text(
-                                    '${quantity(stock)} ${p['unit']} in stock',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: stock <= number(p['lowStock'])
-                                          ? accent
-                                          : muted,
+                                  if (!isCompact)
+                                    Text(
+                                      '${quantity(stock)} ${p['unit']} in stock',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: stock <= number(p['lowStock'])
+                                            ? accent
+                                            : muted,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 9),
+                                  if (!isCompact) const SizedBox(height: 6),
                                   Row(
                                     children: [
                                       Expanded(
@@ -432,25 +588,24 @@ class _PosPageState extends State<PosPage> {
                                           alignment: Alignment.centerLeft,
                                           child: Text(
                                             money(p['price']),
-                                            style: const TextStyle(
-                                              fontSize: 16,
+                                            style: TextStyle(
+                                              fontSize: isCompact ? 14 : 16,
                                               fontWeight: FontWeight.w800,
                                             ),
                                           ),
                                         ),
                                       ),
                                       Container(
-                                        width: 25,
-                                        height: 25,
+                                        width: isCompact ? 24 : 26,
+                                        height: isCompact ? 24 : 26,
                                         decoration: BoxDecoration(
                                           color: selected ? accent : canvas,
-                                          borderRadius: BorderRadius.circular(
-                                            7,
-                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
                                         ),
                                         child: Icon(
                                           Icons.add,
-                                          size: 17,
+                                          size: isCompact ? 15 : 17,
                                           color: selected ? Colors.white : ink,
                                         ),
                                       ),
@@ -479,22 +634,86 @@ class _PosPageState extends State<PosPage> {
       totals = {'total': 0};
       problem = '$e';
     }
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 22, 16, 12),
-          child: Row(
-            children: [
-              if (MediaQuery.sizeOf(context).width < 1180)
+
+    final screenW = MediaQuery.sizeOf(context).width;
+    final isDesktopWide = screenW >= 1000;
+
+    if (!isDesktopWide) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            child: Row(
+              children: [
                 IconButton(
                   onPressed: () => setState(() => mobileCart = false),
                   icon: const Icon(Icons.arrow_back, size: 20),
                 ),
+                const Expanded(
+                  child: Text(
+                    'Current bill',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -.5,
+                    ),
+                  ),
+                ),
+                Pill('${lines.length} items', color: muted),
+                IconButton(
+                  tooltip: 'Clear bill (Esc)',
+                  onPressed: lines.isEmpty ? null : clearCart,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 19,
+                    color: muted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: lines.isEmpty
+                ? const SingleChildScrollView(
+                    child: EmptyState(
+                      icon: Icons.shopping_bag_outlined,
+                      title: 'Ready for your first item',
+                      message:
+                          'Tap a product in the catalog to add it to this bill.',
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
+                      _customerTile(),
+                      const SizedBox(height: 12),
+                      for (int index = 0; index < lines.length; index++) ...[
+                        if (index > 0)
+                          const Divider(height: 18, color: lineColor),
+                        _cartItemWidget(index),
+                      ],
+                      const SizedBox(height: 16),
+                      _billBreakdownCard(totals, problem, isMobile: true),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+          ),
+          if (lines.isNotEmpty) _stickyMobileCheckoutBar(totals, problem),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 16, 10),
+          child: Row(
+            children: [
               const Expanded(
                 child: Text(
                   'Current bill',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 19,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -.5,
                   ),
@@ -510,40 +729,10 @@ class _PosPageState extends State<PosPage> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 22),
-          child: Material(
-            color: canvas,
-            borderRadius: BorderRadius.circular(10),
-            child: ListTile(
-              dense: true,
-              onTap: editCustomer,
-              leading: const Icon(
-                Icons.person_add_alt_outlined,
-                size: 21,
-                color: muted,
-              ),
-              title: Text(
-                '${customer['name'] ?? ''}'.isEmpty
-                    ? 'Walk-in customer'
-                    : '${customer['name']}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-              subtitle: Text(
-                '${customer['address'] ?? ''}'.isEmpty
-                    ? 'Add customer details for this bill'
-                    : '${customer['address']}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: muted, fontSize: 10),
-              ),
-              trailing: const Icon(Icons.chevron_right, size: 18),
-            ),
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
+          child: _customerTile(),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         Expanded(
           child: lines.isEmpty
               ? const SingleChildScrollView(
@@ -555,462 +744,572 @@ class _PosPageState extends State<PosPage> {
                   ),
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
                   itemCount: lines.length,
                   separatorBuilder: (_, _) =>
-                      const Divider(height: 24, color: lineColor),
-                  itemBuilder: (context, index) {
-                    final l = lines[index];
-                    final q = number(l['quantity']);
-                    final p = number(l['price']);
-                    final lineGross = q * p;
-                    final itemDisc =
-                        (l['discount'] as Map?) ?? {'type': 'amount', 'value': 0};
-                    final discVal = number(itemDisc['value']);
-                    final hasDisc = discVal > 0;
-                    double lineDiscountAmt = 0;
-                    if (hasDisc) {
-                      lineDiscountAmt = itemDisc['type'] == 'percent'
-                          ? (lineGross * (discVal / 100))
-                          : (discVal > lineGross ? lineGross : discVal);
-                    }
-                    final lineNet = (lineGross - lineDiscountAmt).clamp(0.0, double.infinity);
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '${l['name']}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Edit item details',
-                              onPressed: () => editLine(index: index),
-                              icon: const Icon(
-                                Icons.edit_outlined,
-                                size: 16,
-                                color: muted,
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Remove item',
-                              onPressed: () {
-                                lines.removeAt(index);
-                                changed();
-                              },
-                              icon: const Icon(
-                                Icons.close,
-                                size: 16,
-                                color: muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          '${money(l['price'])} / ${l['unit']}',
-                          style: const TextStyle(fontSize: 11, color: muted),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                border: Border.all(color: lineColor),
-                                borderRadius: BorderRadius.circular(7),
-                              ),
-                              child: Row(
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Decrease quantity',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () {
-                                      if (q <= 1) {
-                                        lines.removeAt(index);
-                                      } else {
-                                        l['quantity'] = q - 1;
-                                      }
-                                      changed();
-                                    },
-                                    icon: const Icon(Icons.remove, size: 14),
-                                  ),
-                                  Text(
-                                    quantity(l['quantity']),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Increase quantity',
-                                    visualDensity: VisualDensity.compact,
-                                    onPressed: () {
-                                      l['quantity'] = q + 1;
-                                      changed();
-                                    },
-                                    icon: const Icon(Icons.add, size: 14),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              onTap: () => editItemDiscount(index),
-                              borderRadius: BorderRadius.circular(7),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: hasDisc
-                                      ? green.withValues(alpha: 0.12)
-                                      : canvas,
-                                  border: Border.all(
-                                    color: hasDisc
-                                        ? green.withValues(alpha: 0.35)
-                                        : lineColor,
-                                  ),
-                                  borderRadius: BorderRadius.circular(7),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      hasDisc
-                                          ? Icons.local_offer
-                                          : Icons.discount_outlined,
-                                      size: 13,
-                                      color: hasDisc ? green : muted,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      hasDisc
-                                          ? (itemDisc['type'] == 'percent'
-                                              ? '${itemDisc['value']}% off'
-                                              : '-${money(discVal)}')
-                                          : '+ Disc',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: hasDisc
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: hasDisc ? green : ink,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const Spacer(),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                if (hasDisc)
-                                  Text(
-                                    money(lineGross),
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: muted,
-                                      decoration: TextDecoration.lineThrough,
-                                    ),
-                                  ),
-                                Text(
-                                  money(lineNet),
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
-                                    color: hasDisc ? green : ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        if (hasDisc)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 6),
-                            child: Row(
-                              children: [
-                                Pill(
-                                  'Item saving: -${money(lineDiscountAmt)} (${itemDisc['type'] == 'percent' ? '${itemDisc['value']}%' : money(discVal)} off)',
-                                  color: green,
-                                ),
-                                const SizedBox(width: 4),
-                                InkWell(
-                                  onTap: () {
-                                    l['discount'] = {
-                                      'type': 'amount',
-                                      'value': 0,
-                                    };
-                                    changed();
-                                  },
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(2),
-                                    child: Icon(
-                                      Icons.close,
-                                      size: 13,
-                                      color: muted,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        if (l['productId'] != null &&
-                            number(l['quantity']) >
-                                widget.store.stockFor(l['productId']))
-                          const Padding(
-                            padding: EdgeInsets.only(top: 6),
-                            child: Text(
-                              'Quantity exceeds available stock',
-                              style: TextStyle(color: accent, fontSize: 10),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
+                      const Divider(height: 18, color: lineColor),
+                  itemBuilder: (context, index) => _cartItemWidget(index),
                 ),
         ),
         Container(
-          padding: const EdgeInsets.all(22),
+          padding: const EdgeInsets.fromLTRB(18, 12, 18, 14),
           decoration: const BoxDecoration(
+            color: Colors.white,
             border: Border(top: BorderSide(color: lineColor)),
           ),
-          child: Column(
-            children: [
-              if (number(discount['value']) > 0)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: green.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.verified_outlined, size: 18, color: green),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Overall bill discount: ${discount['type'] == 'percent' ? '${discount['value']}% off' : money(discount['value'])}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
-                                color: green,
-                              ),
-                            ),
-                            Text(
-                              'Saving ${money(totals['overallDiscountTotal'] ?? totals['discountTotal'])} on total bill',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: green.withValues(alpha: 0.8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TextButton(
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                        ),
-                        onPressed: lines.isEmpty ? null : editDiscount,
-                        child: const Text('Edit', style: TextStyle(fontSize: 11)),
-                      ),
-                      IconButton(
-                        tooltip: 'Remove overall discount',
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.close, size: 15, color: muted),
-                        onPressed: () {
-                          discount = {'type': 'amount', 'value': 0};
-                          changed();
-                        },
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      minimumSize: const Size(double.infinity, 36),
-                      side: const BorderSide(color: lineColor),
-                    ),
-                    onPressed: lines.isEmpty ? null : editDiscount,
-                    icon: const Icon(
-                      Icons.percent_rounded,
-                      size: 15,
-                      color: accent,
-                    ),
-                    label: const Text(
-                      '+ Add overall bill discount (₹ or %)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Bill summary',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                  if (number(discount['value']) <= 0)
-                    TextButton.icon(
-                      onPressed: lines.isEmpty ? null : editDiscount,
-                      icon: const Icon(Icons.discount_outlined, size: 15),
-                      label: const Text(
-                        'Discount',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                    ),
-                ],
-              ),
-              _totalRow('Gross Subtotal', totals['subtotal']),
-              if (number(totals['itemDiscountTotal']) > 0)
-                _totalRow(
-                  'Item discounts',
-                  -(number(totals['itemDiscountTotal'])),
-                  highlightGreen: true,
-                ),
-              if (number(totals['overallDiscountTotal']) > 0)
-                _totalRow(
-                  'Bill discount (${discount['type'] == 'percent' ? '${discount['value']}%' : money(discount['value'])})',
-                  -(number(totals['overallDiscountTotal'])),
-                  highlightGreen: true,
-                ),
-              if (number(totals['itemDiscountTotal']) <= 0 &&
-                  number(totals['overallDiscountTotal']) <= 0 &&
-                  number(totals['discountTotal']) > 0)
-                _totalRow(
-                  'Discounts',
-                  -(number(totals['discountTotal'])),
-                  highlightGreen: true,
-                ),
-              if (gstEnabled) ...[
-                _totalRow('Taxable value', totals['taxableTotal']),
-                _totalRow(
-                  taxInclusive ? 'GST (included in prices)' : 'GST added',
-                  totals['taxTotal'],
-                ),
-              ] else if (number(totals['taxTotal']) > 0)
-                _totalRow('Tax', totals['taxTotal']),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'GST billing',
-                      style: TextStyle(fontSize: 11, color: muted),
-                    ),
-                  ),
-                  Switch(
-                    value: gstEnabled,
-                    onChanged: (v) {
-                      gstEnabled = v;
-                      changed();
-                    },
-                  ),
-                ],
-              ),
-              if (gstEnabled)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        taxInclusive
-                            ? 'Prices include tax'
-                            : 'Tax added to prices',
-                        style: const TextStyle(fontSize: 10, color: muted),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        taxInclusive = !taxInclusive;
-                        changed();
-                      },
-                      child: const Text(
-                        'Change',
-                        style: TextStyle(fontSize: 10),
-                      ),
-                    ),
-                  ],
-                ),
-              if (problem != null)
-                Text(
-                  problem,
-                  style: const TextStyle(color: Colors.red, fontSize: 11),
-                ),
-              const Divider(color: lineColor),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text(
-                    'Total amount',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const Spacer(),
-                  Text(
-                    money(totals['total']),
-                    style: const TextStyle(
-                      fontSize: 25,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -.8,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 17),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: lines.isEmpty || busy || problem != null
-                      ? null
-                      : checkout,
-                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                  label: Text(
-                    busy ? 'Saving bill…' : 'Continue to payment (F2)',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Shortcuts: F1 Custom / Loose item · F2 Checkout · Esc Clear',
-                style: TextStyle(fontSize: 10, color: muted),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Draft saves automatically on this device',
-                style: TextStyle(fontSize: 9, color: muted),
-              ),
-            ],
-          ),
+          child: _billBreakdownCard(totals, problem, isMobile: false),
         ),
       ],
     );
   }
+
+  Widget _customerTile() => Material(
+    color: canvas,
+    borderRadius: BorderRadius.circular(10),
+    child: ListTile(
+      dense: true,
+      onTap: editCustomer,
+      leading: const Icon(
+        Icons.person_add_alt_outlined,
+        size: 20,
+        color: muted,
+      ),
+      title: Text(
+        '${customer['name'] ?? ''}'.isEmpty
+            ? 'Walk-in customer'
+            : '${customer['name']}',
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+      subtitle: Text(
+        '${customer['address'] ?? ''}'.isEmpty
+            ? 'Add customer details for this bill'
+            : '${customer['address']}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: muted, fontSize: 10),
+      ),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+    ),
+  );
+
+  Widget _cartItemWidget(int index) {
+    final l = lines[index];
+    final q = number(l['quantity']);
+    final p = number(l['price']);
+    final lineGross = q * p;
+    final itemDisc =
+        (l['discount'] as Map?) ?? {'type': 'amount', 'value': 0};
+    final discVal = number(itemDisc['value']);
+    final hasDisc = discVal > 0;
+    double lineDiscountAmt = 0;
+    if (hasDisc) {
+      lineDiscountAmt = itemDisc['type'] == 'percent'
+          ? (lineGross * (discVal / 100))
+          : (discVal > lineGross ? lineGross : discVal);
+    }
+    final lineNet = (lineGross - lineDiscountAmt).clamp(0.0, double.infinity);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${l['name']}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Edit item details',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => editLine(index: index),
+              icon: const Icon(
+                Icons.edit_outlined,
+                size: 16,
+                color: muted,
+              ),
+            ),
+            IconButton(
+              tooltip: 'Remove item',
+              visualDensity: VisualDensity.compact,
+              onPressed: () {
+                lines.removeAt(index);
+                changed();
+              },
+              icon: const Icon(
+                Icons.close,
+                size: 16,
+                color: muted,
+              ),
+            ),
+          ],
+        ),
+        Text(
+          '${money(l['price'])} / ${l['unit']}',
+          style: const TextStyle(fontSize: 11, color: muted),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: lineColor),
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Decrease quantity',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      if (q <= 1) {
+                        lines.removeAt(index);
+                      } else {
+                        l['quantity'] = q - 1;
+                      }
+                      changed();
+                    },
+                    icon: const Icon(Icons.remove, size: 14),
+                  ),
+                  Text(
+                    quantity(l['quantity']),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Increase quantity',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      l['quantity'] = q + 1;
+                      changed();
+                    },
+                    icon: const Icon(Icons.add, size: 14),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            InkWell(
+              onTap: () => editItemDiscount(index),
+              borderRadius: BorderRadius.circular(7),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: hasDisc
+                      ? green.withValues(alpha: 0.12)
+                      : canvas,
+                  border: Border.all(
+                    color: hasDisc
+                        ? green.withValues(alpha: 0.35)
+                        : lineColor,
+                  ),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      hasDisc
+                          ? Icons.local_offer
+                          : Icons.discount_outlined,
+                      size: 13,
+                      color: hasDisc ? green : muted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      hasDisc
+                          ? (itemDisc['type'] == 'percent'
+                              ? '${itemDisc['value']}% off'
+                              : '-${money(discVal)}')
+                          : '+ Disc',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: hasDisc
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: hasDisc ? green : ink,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Spacer(),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                if (hasDisc)
+                  Text(
+                    money(lineGross),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: muted,
+                      decoration: TextDecoration.lineThrough,
+                    ),
+                  ),
+                Text(
+                  money(lineNet),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: hasDisc ? green : ink,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        if (hasDisc)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              children: [
+                Pill(
+                  'Item saving: -${money(lineDiscountAmt)} (${itemDisc['type'] == 'percent' ? '${itemDisc['value']}%' : money(discVal)} off)',
+                  color: green,
+                ),
+                const SizedBox(width: 4),
+                InkWell(
+                  onTap: () {
+                    l['discount'] = {
+                      'type': 'amount',
+                      'value': 0,
+                    };
+                    changed();
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.all(2),
+                    child: Icon(
+                      Icons.close,
+                      size: 13,
+                      color: muted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (l['productId'] != null &&
+            number(l['quantity']) >
+                widget.store.stockFor(l['productId']))
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              'Quantity exceeds available stock',
+              style: TextStyle(color: accent, fontSize: 10),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _stickyMobileCheckoutBar(Json totals, String? problem) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      border: Border(top: BorderSide(color: lineColor)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 6,
+          offset: Offset(0, -2),
+        ),
+      ],
+    ),
+    child: SafeArea(
+      top: false,
+      child: Row(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${lines.length} ${lines.length == 1 ? 'item' : 'items'}',
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: muted,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                money(totals['total']),
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: lines.isEmpty || busy || problem != null
+                  ? null
+                  : checkout,
+              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+              label: Text(
+                busy ? 'Saving bill…' : 'Continue to payment (F2)',
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _billBreakdownCard(
+    Json totals,
+    String? problem, {
+    required bool isMobile,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (number(discount['value']) > 0)
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            color: green.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: green.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.verified_outlined, size: 16, color: green),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bill discount: ${discount['type'] == 'percent' ? '${discount['value']}% off' : money(discount['value'])}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        color: green,
+                      ),
+                    ),
+                    Text(
+                      'Saving ${money(totals['overallDiscountTotal'] ?? totals['discountTotal'])} on total bill',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: green.withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                ),
+                onPressed: lines.isEmpty ? null : editDiscount,
+                child: const Text('Edit', style: TextStyle(fontSize: 11)),
+              ),
+              IconButton(
+                tooltip: 'Remove discount',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.close, size: 15, color: muted),
+                onPressed: () {
+                  discount = {'type': 'amount', 'value': 0};
+                  changed();
+                },
+              ),
+            ],
+          ),
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              minimumSize: const Size(double.infinity, 34),
+              side: const BorderSide(color: lineColor),
+            ),
+            onPressed: lines.isEmpty ? null : editDiscount,
+            icon: const Icon(
+              Icons.percent_rounded,
+              size: 14,
+              color: accent,
+            ),
+            label: const Text(
+              '+ Add overall bill discount (₹ or %)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Bill summary',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          if (number(discount['value']) <= 0)
+            TextButton.icon(
+              onPressed: lines.isEmpty ? null : editDiscount,
+              icon: const Icon(Icons.discount_outlined, size: 14),
+              label: const Text(
+                'Discount',
+                style: TextStyle(fontSize: 11),
+              ),
+            ),
+        ],
+      ),
+      _totalRow('Gross Subtotal', totals['subtotal']),
+      if (number(totals['itemDiscountTotal']) > 0)
+        _totalRow(
+          'Item discounts',
+          -(number(totals['itemDiscountTotal'])),
+          highlightGreen: true,
+        ),
+      if (number(totals['overallDiscountTotal']) > 0)
+        _totalRow(
+          'Bill discount (${discount['type'] == 'percent' ? '${discount['value']}%' : money(discount['value'])})',
+          -(number(totals['overallDiscountTotal'])),
+          highlightGreen: true,
+        ),
+      if (number(totals['itemDiscountTotal']) <= 0 &&
+          number(totals['overallDiscountTotal']) <= 0 &&
+          number(totals['discountTotal']) > 0)
+        _totalRow(
+          'Discounts',
+          -(number(totals['discountTotal'])),
+          highlightGreen: true,
+        ),
+      if (gstEnabled) ...[
+        _totalRow('Taxable value', totals['taxableTotal']),
+        _totalRow(
+          taxInclusive ? 'GST (included in prices)' : 'GST added',
+          totals['taxTotal'],
+        ),
+      ] else if (number(totals['taxTotal']) > 0)
+        _totalRow('Tax', totals['taxTotal']),
+      Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'GST billing',
+              style: TextStyle(fontSize: 11, color: muted),
+            ),
+          ),
+          Switch(
+            value: gstEnabled,
+            onChanged: (v) {
+              gstEnabled = v;
+              changed();
+            },
+          ),
+        ],
+      ),
+      if (gstEnabled)
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                taxInclusive
+                    ? 'Prices include tax'
+                    : 'Tax added to prices',
+                style: const TextStyle(fontSize: 10, color: muted),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                taxInclusive = !taxInclusive;
+                changed();
+              },
+              child: const Text(
+                'Change',
+                style: TextStyle(fontSize: 10),
+              ),
+            ),
+          ],
+        ),
+      if (problem != null)
+        Text(
+          problem,
+          style: const TextStyle(color: Colors.red, fontSize: 11),
+        ),
+      if (!isMobile) ...[
+        const Divider(color: lineColor),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            const Text(
+              'Total amount',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const Spacer(),
+            Text(
+              money(totals['total']),
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -.8,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: lines.isEmpty || busy || problem != null
+                ? null
+                : checkout,
+            icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+            label: Text(
+              busy ? 'Saving bill…' : 'Continue to payment (F2)',
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Shortcuts: F1 Custom / Loose item · F2 Checkout · Esc Clear',
+          style: TextStyle(fontSize: 10, color: muted),
+        ),
+        const SizedBox(height: 3),
+        const Text(
+          'Draft saves automatically on this device',
+          style: TextStyle(fontSize: 9, color: muted),
+        ),
+      ] else ...[
+        const SizedBox(height: 6),
+        const Center(
+          child: Text(
+            'Shortcuts: F1 Custom item · F2 Checkout · Esc Clear',
+            style: TextStyle(fontSize: 10, color: muted),
+          ),
+        ),
+      ],
+    ],
+  );
 
   Widget _totalRow(
     String label,
