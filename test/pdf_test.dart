@@ -1,0 +1,4 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:counterday/services/invoice_pdf.dart';
+import 'package:counterday/domain/billing.dart';
+void main(){TestWidgetsFlutterBinding.ensureInitialized();for(final paper in ['A4','A5','58mm','80mm']){test('renders $paper multi-line invoice with real totals',()async{final bill=calculateBill(lines:List.generate(45,(i)=>{'name':'Long plumbing supply product $i','price':118,'quantity':2.5,'gst':18,'unit':'m','hsn':'1234'}),gstEnabled:true,taxInclusive:true);final bytes=await InvoicePdf.generate({...bill,'number':'26-TEST-00001','createdAt':DateTime.now().toIso8601String(),'shop':{'name':'Hardware shop','tagline':'Your building partner'},'customer':{'name':'Test customer'},'gstEnabled':true,'taxInclusive':true,'interstate':false},paper:paper);expect(String.fromCharCodes(bytes.take(4)),'%PDF');expect(bytes.length,greaterThan(5000));});}}
