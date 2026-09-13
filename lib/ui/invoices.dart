@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
@@ -441,7 +443,10 @@ Future<void> showInvoice(
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 9),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
+                                  _invoiceLineThumbnail(line, store),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -1000,3 +1005,62 @@ Future<void> deleteInvoiceDialog(
     ),
   );
 }
+
+Widget _invoiceLineThumbnail(dynamic line, AppStore store) {
+  final l = line as Map;
+  final product = store.products.cast<Map<String, dynamic>?>().firstWhere(
+    (p) => p?['id'] == l['productId'],
+    orElse: () => null,
+  );
+  final rawImage = (l['image'] ?? product?['image']) as String?;
+  if (rawImage != null && rawImage.trim().isNotEmpty) {
+    try {
+      final clean = rawImage.contains(',')
+          ? rawImage.split(',').last.trim()
+          : rawImage.trim();
+      final bytes = base64Decode(clean);
+      return Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: lineColor),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(5),
+          child: Image.memory(
+            bytes,
+            width: 38,
+            height: 38,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) =>
+                _defaultInvoiceLineIcon(product?['category'] ?? ''),
+          ),
+        ),
+      );
+    } catch (_) {
+      // Fallback
+    }
+  }
+  return _defaultInvoiceLineIcon(product?['category'] ?? '');
+}
+
+Widget _defaultInvoiceLineIcon(String cat) {
+  return Container(
+    width: 38,
+    height: 38,
+    decoration: BoxDecoration(
+      color: const Color(0xFFF0EDE5),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Center(
+      child: Icon(
+        categoryIcon(cat),
+        color: const Color(0xFF938363),
+        size: 18,
+      ),
+    ),
+  );
+}
+

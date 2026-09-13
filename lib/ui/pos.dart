@@ -88,6 +88,7 @@ class _PosPageState extends State<PosPage> {
         'gst': p['gst'] ?? 0,
         'hsn': p['hsn'] ?? '',
         'discount': {'type': 'amount', 'value': 0},
+        'image': p['image'],
       });
     } else {
       lines[index]['quantity'] = number(lines[index]['quantity']) + 1;
@@ -472,14 +473,25 @@ class _PosPageState extends State<PosPage> {
                       itemBuilder: (context, index) {
                         final p = items[index];
                         final stock = widget.store.stockFor(p['id']);
-                        final selected = lines.any(
+                        final lineIndex = lines.indexWhere(
                           (l) => l['productId'] == p['id'],
                         );
+                        final selected = lineIndex >= 0;
+                        final cartQty = selected
+                            ? number(lines[lineIndex]['quantity'])
+                            : 0.0;
                         return Material(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           child: InkWell(
-                            onTap: () => addProduct(p),
+                            onTap: () {
+                              if (!selected) {
+                                addProduct(p);
+                              } else {
+                                lines.removeAt(lineIndex);
+                                changed();
+                              }
+                            },
                             borderRadius: BorderRadius.circular(12),
                             child: Container(
                               decoration: BoxDecoration(
@@ -498,6 +510,7 @@ class _PosPageState extends State<PosPage> {
                                     isCompact: isCompact,
                                     stock: stock,
                                     selected: selected,
+                                    cartQty: cartQty,
                                   ),
                                   Expanded(
                                     child: Padding(
@@ -554,24 +567,122 @@ class _PosPageState extends State<PosPage> {
                                                   ),
                                                 ),
                                               ),
-                                              Container(
-                                                width: isCompact ? 24 : 28,
-                                                height: isCompact ? 24 : 28,
-                                                decoration: BoxDecoration(
-                                                  color: selected
-                                                      ? accent
-                                                      : canvas,
+                                              if (!selected)
+                                                InkWell(
+                                                  onTap: () => addProduct(p),
                                                   borderRadius:
                                                       BorderRadius.circular(6),
+                                                  child: Container(
+                                                    width: isCompact ? 24 : 28,
+                                                    height: isCompact ? 24 : 28,
+                                                    decoration: BoxDecoration(
+                                                      color: canvas,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              6),
+                                                      border: Border.all(
+                                                          color: lineColor),
+                                                    ),
+                                                    child: Icon(
+                                                      Icons.add,
+                                                      size:
+                                                          isCompact ? 15 : 18,
+                                                      color: ink,
+                                                    ),
+                                                  ),
+                                                )
+                                              else
+                                                Container(
+                                                  decoration: BoxDecoration(
+                                                    color: canvas,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            7),
+                                                    border: Border.all(
+                                                      color: accent.withValues(
+                                                          alpha: 0.5),
+                                                    ),
+                                                  ),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      InkWell(
+                                                        onTap: () {
+                                                          if (cartQty <= 1) {
+                                                            lines.removeAt(
+                                                                lineIndex);
+                                                          } else {
+                                                            lines[lineIndex][
+                                                                    'quantity'] =
+                                                                cartQty - 1;
+                                                          }
+                                                          changed();
+                                                        },
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(6),
+                                                        child: Padding(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                  isCompact
+                                                                      ? 3
+                                                                      : 4),
+                                                          child: const Icon(
+                                                            Icons.remove,
+                                                            size: 13,
+                                                            color: ink,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      Padding(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                          horizontal: 3,
+                                                        ),
+                                                        child: Text(
+                                                          quantity(cartQty),
+                                                          style: TextStyle(
+                                                            fontSize: isCompact
+                                                                ? 11
+                                                                : 12,
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            color: accent,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      InkWell(
+                                                        onTap: () =>
+                                                            addProduct(p),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(6),
+                                                        child: Container(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                  isCompact
+                                                                      ? 3
+                                                                      : 4),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: accent,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        5),
+                                                          ),
+                                                          child: const Icon(
+                                                            Icons.add,
+                                                            size: 13,
+                                                            color: Colors.white,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
-                                                child: Icon(
-                                                  Icons.add,
-                                                  size: isCompact ? 15 : 18,
-                                                  color: selected
-                                                      ? Colors.white
-                                                      : ink,
-                                                ),
-                                              ),
                                             ],
                                           ),
                                         ],
@@ -779,205 +890,254 @@ class _PosPageState extends State<PosPage> {
     }
     final lineNet = (lineGross - lineDiscountAmt).clamp(0.0, double.infinity);
 
-    return Column(
+    final product = widget.store.products.cast<Map<String, dynamic>?>().firstWhere(
+      (prod) => prod?['id'] == l['productId'],
+      orElse: () => null,
+    );
+    final rawImage = (l['image'] ?? product?['image']) as String?;
+
+    Widget itemThumbnail;
+    if (rawImage != null && rawImage.trim().isNotEmpty) {
+      try {
+        final clean = rawImage.contains(',')
+            ? rawImage.split(',').last.trim()
+            : rawImage.trim();
+        final bytes = base64Decode(clean);
+        itemThumbnail = Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: lineColor),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(7),
+            child: Image.memory(
+              bytes,
+              width: 44,
+              height: 44,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) =>
+                  _cartDefaultIcon(product?['category'] ?? ''),
+            ),
+          ),
+        );
+      } catch (_) {
+        itemThumbnail = _cartDefaultIcon(product?['category'] ?? '');
+      }
+    } else {
+      itemThumbnail = _cartDefaultIcon(product?['category'] ?? '');
+    }
+
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                '${l['name']}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Edit item details',
-              visualDensity: VisualDensity.compact,
-              onPressed: () => editLine(index: index),
-              icon: const Icon(
-                Icons.edit_outlined,
-                size: 16,
-                color: muted,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Remove item',
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                lines.removeAt(index);
-                changed();
-              },
-              icon: const Icon(
-                Icons.close,
-                size: 16,
-                color: muted,
-              ),
-            ),
-          ],
-        ),
-        Text(
-          '${money(l['price'])} / ${l['unit']}',
-          style: const TextStyle(fontSize: 11, color: muted),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                border: Border.all(color: lineColor),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Row(
+        itemThumbnail,
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  IconButton(
-                    tooltip: 'Decrease quantity',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      if (q <= 1) {
-                        lines.removeAt(index);
-                      } else {
-                        l['quantity'] = q - 1;
-                      }
-                      changed();
-                    },
-                    icon: const Icon(Icons.remove, size: 14),
-                  ),
-                  Text(
-                    quantity(l['quantity']),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
+                  Expanded(
+                    child: Text(
+                      '${l['name']}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Increase quantity',
+                    tooltip: 'Edit item details',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => editLine(index: index),
+                    icon: const Icon(
+                      Icons.edit_outlined,
+                      size: 16,
+                      color: muted,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Remove item',
                     visualDensity: VisualDensity.compact,
                     onPressed: () {
-                      l['quantity'] = q + 1;
+                      lines.removeAt(index);
                       changed();
                     },
-                    icon: const Icon(Icons.add, size: 14),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 16,
+                      color: muted,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: () => editItemDiscount(index),
-              borderRadius: BorderRadius.circular(7),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: hasDisc
-                      ? green.withValues(alpha: 0.12)
-                      : canvas,
-                  border: Border.all(
-                    color: hasDisc
-                        ? green.withValues(alpha: 0.35)
-                        : lineColor,
-                  ),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      hasDisc
-                          ? Icons.local_offer
-                          : Icons.discount_outlined,
-                      size: 13,
-                      color: hasDisc ? green : muted,
+              Text(
+                '${money(l['price'])} / ${l['unit']}',
+                style: const TextStyle(fontSize: 11, color: muted),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: lineColor),
+                      borderRadius: BorderRadius.circular(7),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      hasDisc
-                          ? (itemDisc['type'] == 'percent'
-                              ? '${itemDisc['value']}% off'
-                              : '-${money(discVal)}')
-                          : '+ Disc',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: hasDisc
-                            ? FontWeight.w700
-                            : FontWeight.w500,
-                        color: hasDisc ? green : ink,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Decrease quantity',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            if (q <= 1) {
+                              lines.removeAt(index);
+                            } else {
+                              l['quantity'] = q - 1;
+                            }
+                            changed();
+                          },
+                          icon: const Icon(Icons.remove, size: 14),
+                        ),
+                        Text(
+                          quantity(l['quantity']),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Increase quantity',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            l['quantity'] = q + 1;
+                            changed();
+                          },
+                          icon: const Icon(Icons.add, size: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => editItemDiscount(index),
+                    borderRadius: BorderRadius.circular(7),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: hasDisc
+                            ? green.withValues(alpha: 0.12)
+                            : canvas,
+                        border: Border.all(
+                          color: hasDisc
+                              ? green.withValues(alpha: 0.35)
+                              : lineColor,
+                        ),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            hasDisc
+                                ? Icons.local_offer
+                                : Icons.discount_outlined,
+                            size: 13,
+                            color: hasDisc ? green : muted,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            hasDisc
+                                ? (itemDisc['type'] == 'percent'
+                                    ? '${itemDisc['value']}% off'
+                                    : '-${money(discVal)}')
+                                : '+ Disc',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: hasDisc
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: hasDisc ? green : ink,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const Spacer(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (hasDisc)
+                        Text(
+                          money(lineGross),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: muted,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                      Text(
+                        money(lineNet),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: hasDisc ? green : ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ),
-            const Spacer(),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                if (hasDisc)
-                  Text(
-                    money(lineGross),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: muted,
-                      decoration: TextDecoration.lineThrough,
-                    ),
-                  ),
-                Text(
-                  money(lineNet),
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: hasDisc ? green : ink,
+              if (hasDisc)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      Pill(
+                        'Item saving: -${money(lineDiscountAmt)} (${itemDisc['type'] == 'percent' ? '${itemDisc['value']}%' : money(discVal)} off)',
+                        color: green,
+                      ),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () {
+                          l['discount'] = {
+                            'type': 'amount',
+                            'value': 0,
+                          };
+                          changed();
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.close,
+                            size: 13,
+                            color: muted,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ],
+              if (l['productId'] != null &&
+                  number(l['quantity']) >
+                      widget.store.stockFor(l['productId']))
+                const Padding(
+                  padding: EdgeInsets.only(top: 6),
+                  child: Text(
+                    'Quantity exceeds available stock',
+                    style: TextStyle(color: accent, fontSize: 10),
+                  ),
+                ),
+            ],
+          ),
         ),
-        if (hasDisc)
-          Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Row(
-              children: [
-                Pill(
-                  'Item saving: -${money(lineDiscountAmt)} (${itemDisc['type'] == 'percent' ? '${itemDisc['value']}%' : money(discVal)} off)',
-                  color: green,
-                ),
-                const SizedBox(width: 4),
-                InkWell(
-                  onTap: () {
-                    l['discount'] = {
-                      'type': 'amount',
-                      'value': 0,
-                    };
-                    changed();
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.all(2),
-                    child: Icon(
-                      Icons.close,
-                      size: 13,
-                      color: muted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        if (l['productId'] != null &&
-            number(l['quantity']) >
-                widget.store.stockFor(l['productId']))
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text(
-              'Quantity exceeds available stock',
-              style: TextStyle(color: accent, fontSize: 10),
-            ),
-          ),
       ],
     );
   }
@@ -2288,6 +2448,7 @@ class _PosPageState extends State<PosPage> {
     required bool isCompact,
     required double stock,
     required bool selected,
+    double cartQty = 0,
   }) {
     final rawImage = p['image'] as String?;
     final hasImage = rawImage != null && rawImage.trim().isNotEmpty;
@@ -2355,16 +2516,19 @@ class _PosPageState extends State<PosPage> {
               ),
             ),
           ),
-          if (selected)
+          if (selected && cartQty > 0)
             Positioned(
               top: 6,
               left: 6,
               child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
                   color: accent,
-                  shape: BoxShape.circle,
-                  boxShadow: [
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: const [
                     BoxShadow(
                       color: Colors.black26,
                       blurRadius: 4,
@@ -2372,10 +2536,24 @@ class _PosPageState extends State<PosPage> {
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.check,
-                  color: Colors.white,
-                  size: 13,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 11,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${quantity(cartQty)} in cart',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -2406,6 +2584,24 @@ class _PosPageState extends State<PosPage> {
             accent,
           ][index % 4],
           size: isCompact ? 30 : 40,
+        ),
+      ),
+    );
+  }
+
+  Widget _cartDefaultIcon(String cat) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0EDE5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Center(
+        child: Icon(
+          categoryIcon(cat),
+          color: const Color(0xFF938363),
+          size: 20,
         ),
       ),
     );
