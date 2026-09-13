@@ -83,37 +83,41 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    srsLogoWidget(size: 32, radius: 8),
-                    const SizedBox(width: 10),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'SRS AGENCIES',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 13,
-                                letterSpacing: -0.3,
-                                color: ink,
+                    srsLogoWidget(size: 30, radius: 7),
+                    const SizedBox(width: 8),
+                    const Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'SRS AGENCIES',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 13,
+                                  letterSpacing: -0.3,
+                                  color: ink,
+                                ),
                               ),
-                            ),
-                            SizedBox(width: 6),
-                            Icon(Icons.open_in_new_rounded,
-                                size: 12, color: muted),
-                          ],
-                        ),
-                        Text(
-                          'Tap logo for Shop Overview & Quick Access',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: muted,
+                              SizedBox(width: 5),
+                              Icon(Icons.open_in_new_rounded,
+                                  size: 11, color: muted),
+                            ],
                           ),
-                        ),
-                      ],
+                          Text(
+                            'Tap logo for Shop Overview',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: muted,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -160,40 +164,82 @@ class _DashboardPageState extends State<DashboardPage> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFFFFD5CE)),
               ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.warning_amber_rounded,
-                    color: Color(0xFFC74343),
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
+              child: isCompact
+                  ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Stock shortage in ${shortages.length} product${shortages.length == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            color: Color(0xFFC74343),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              color: Color(0xFFC74343),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Stock shortage in ${shortages.length} product${shortages.length == 1 ? '' : 's'}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: Color(0xFFC74343),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Units sold during offline operation exceeded recorded physical stock.',
+                          style: TextStyle(fontSize: 11, color: ink),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () => context.go('/inventory'),
+                            child: const Text('Review stock →'),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Units sold during offline operation exceeded recorded physical stock. Review inventory to balance quantities.',
-                          style: TextStyle(fontSize: 11, color: ink),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFC74343),
+                          size: 22,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Stock shortage in ${shortages.length} product${shortages.length == 1 ? '' : 's'}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: Color(0xFFC74343),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              const Text(
+                                'Units sold during offline operation exceeded recorded physical stock. Review inventory to balance quantities.',
+                                style: TextStyle(fontSize: 11, color: ink),
+                              ),
+                            ],
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => context.go('/inventory'),
+                          child: const Text('Review stock →'),
                         ),
                       ],
                     ),
-                  ),
-                  TextButton(
-                    onPressed: () => context.go('/inventory'),
-                    child: const Text('Review stock →'),
-                  ),
-                ],
-              ),
             ),
           Row(
             children: [
@@ -557,85 +603,158 @@ class _DashboardPageState extends State<DashboardPage> {
                         : 'Connected and ready to synchronize.')
                     : 'Operating 100% offline. All bills and inventory are safely stored on this device.';
 
+        final isCompact = MediaQuery.sizeOf(context).width < 650;
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(isCompact ? 12 : 16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: lineColor),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  isSyncing
-                      ? Icons.sync_rounded
-                      : isOnline
-                          ? Icons.cloud_done_outlined
-                          : Icons.cloud_off_outlined,
-                  color: statusColor,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
+          child: isCompact
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Container(
-                          width: 7,
-                          height: 7,
+                          width: 32,
+                          height: 32,
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
+                            color: statusColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            isSyncing
+                                ? Icons.sync_rounded
+                                : isOnline
+                                    ? Icons.cloud_done_outlined
+                                    : Icons.cloud_off_outlined,
                             color: statusColor,
+                            size: 18,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          statusTitle,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            color: statusColor,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            statusTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: statusColor,
+                            ),
                           ),
                         ),
-                        if (pending > 0) ...[
-                          const SizedBox(width: 8),
-                          Pill('$pending queued', color: accent),
-                        ],
+                        if (pending > 0) Pill('$pending queued', color: accent),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       statusSubtitle,
-                      style: const TextStyle(fontSize: 11, color: muted),
+                      style: const TextStyle(fontSize: 10, color: muted),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: isOnline
+                          ? OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: isSyncing ? null : () => cloud.sync(),
+                              icon: const Icon(Icons.refresh_rounded, size: 15),
+                              label: const Text(
+                                'Sync now',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                            )
+                          : OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () => context.go('/settings'),
+                              child: const Text(
+                                'Cloud settings',
+                                style: TextStyle(fontSize: 11),
+                              ),
+                            ),
                     ),
                   ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (isOnline)
-                OutlinedButton.icon(
-                  onPressed: isSyncing ? null : () => cloud.sync(),
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Sync now'),
                 )
-              else
-                OutlinedButton(
-                  onPressed: () => context.go('/settings'),
-                  child: const Text('Cloud settings'),
+              : Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isSyncing
+                            ? Icons.sync_rounded
+                            : isOnline
+                                ? Icons.cloud_done_outlined
+                                : Icons.cloud_off_outlined,
+                        color: statusColor,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: statusColor,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                statusTitle,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: statusColor,
+                                ),
+                              ),
+                              if (pending > 0) ...[
+                                const SizedBox(width: 8),
+                                Pill('$pending queued', color: accent),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            statusSubtitle,
+                            style: const TextStyle(fontSize: 11, color: muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    if (isOnline)
+                      OutlinedButton.icon(
+                        onPressed: isSyncing ? null : () => cloud.sync(),
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        label: const Text('Sync now'),
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: () => context.go('/settings'),
+                        child: const Text('Cloud settings'),
+                      ),
+                  ],
                 ),
-            ],
-          ),
         );
       },
     );
