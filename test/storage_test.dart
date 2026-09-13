@@ -97,4 +97,22 @@ void main(){
     expect(store.stockFor('pipe'), 10);
     expect(store.paidFor(invoice['id']), 0);
   });
+
+  test('updateInvoiceLines modifies items, recalculates totals, and updates inventory stock', () async {
+    final invoice = await sale(store, q: 2, paid: 100);
+    expect(store.stockFor('pipe'), 8);
+    expect(store.dueFor(invoice['id']), 100);
+
+    await store.updateInvoiceLines(invoice['id'], [
+      {'productId': 'pipe', 'name': 'Pipe', 'unit': 'm', 'quantity': 5, 'price': 100, 'gst': 18},
+      {'name': 'Joint', 'unit': 'pcs', 'quantity': 2, 'price': 50, 'gst': 0},
+    ]);
+
+    expect(store.stockFor('pipe'), 5);
+    final updated = store.invoices.firstWhere((i) => i['id'] == invoice['id']);
+    expect(updated['total'], 600);
+    expect((updated['lines'] as List).length, 2);
+    expect(store.dueFor(invoice['id']), 500);
+  });
 }
+

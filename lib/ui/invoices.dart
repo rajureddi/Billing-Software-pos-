@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 
 import '../data/app_store.dart';
+import '../domain/billing.dart';
 import '../services/invoice_pdf.dart';
 import 'common.dart';
 
@@ -433,12 +434,53 @@ Future<void> showInvoice(
                                     ? 'Cancelled'
                                     : due > 0
                                     ? 'Payment pending'
+                                    : due < 0
+                                    ? 'Excess paid'
                                     : 'Paid',
-                                color: due > 0 ? accent : green,
+                                color: due > 0
+                                    ? accent
+                                    : due < 0
+                                    ? const Color(0xFF8E5A2A)
+                                    : green,
                               ),
                             ],
                           ),
                           const SizedBox(height: 18),
+                          Row(
+                            children: [
+                              Text(
+                                'Items (${(invoice['lines'] as List).length})',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: muted,
+                                ),
+                              ),
+                              const Spacer(),
+                              if (invoice['cancelled'] != true)
+                                TextButton.icon(
+                                  onPressed: () => editInvoiceItemsDialog(
+                                    dialog,
+                                    store,
+                                    invoice,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.edit_note_rounded,
+                                    size: 16,
+                                    color: accent,
+                                  ),
+                                  label: const Text(
+                                    'Edit / Add items',
+                                    style: TextStyle(
+                                      color: accent,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
                           for (final line in invoice['lines'] as List)
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 9),
@@ -521,7 +563,10 @@ Future<void> showInvoice(
                             'Paid / net received',
                             store.paidFor(invoice['id']),
                           ),
-                          _invoiceTotal('Balance due', due),
+                          if (due < 0)
+                            _invoiceTotal('Excess paid / Refund due', -due)
+                          else
+                            _invoiceTotal('Balance due', due),
                           const SizedBox(height: 18),
                           if (store.payments.any(
                             (p) => p['invoiceId'] == invoice['id'],
@@ -639,6 +684,26 @@ Future<void> showInvoice(
                           icon: const Icon(Icons.print_outlined, size: 17),
                           label: const Text('Print invoice'),
                         ),
+                        if (invoice['cancelled'] != true)
+                          OutlinedButton.icon(
+                            onPressed: () => editInvoiceItemsDialog(
+                              dialog,
+                              store,
+                              invoice,
+                            ),
+                            icon: const Icon(
+                              Icons.edit_note_rounded,
+                              size: 17,
+                              color: accent,
+                            ),
+                            label: const Text(
+                              'Edit items',
+                              style: TextStyle(
+                                color: accent,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                         if (due > 0)
                           OutlinedButton(
                             onPressed: () =>
@@ -1103,4 +1168,843 @@ Widget _defaultInvoiceLineIcon(String cat) {
     ),
   );
 }
+
+Future<void> editInvoiceItemsDialog(
+  BuildContext context,
+  AppStore store,
+  Json invoice,
+) async {
+  final linesList = (invoice['lines'] as List? ?? [])
+      .map((l) => Map<String, dynamic>.from(l as Map))
+      .toList();
+
+  await showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (editDialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        Map<String, dynamic>? previewBill;
+        String? calculationError;
+        try {
+          if (linesList.isNotEmpty) {
+            previewBill = calculateBill(
+              lines: linesList,
+              discount: (invoice['discount'] as Map?)?.cast<String, dynamic>() ??
+                  {'type': 'amount', 'value': 0},
+              gstEnabled: invoice['gstEnabled'] == true,
+              taxInclusive: invoice['taxInclusive'] == true,
+              interstate: invoice['interstate'] == true,
+            );
+          }
+        } catch (e) {
+          calculationError = e
+              .toString()
+              .replaceFirst('Exception: ', '')
+              .replaceFirst('ArgumentError: ', '');
+        }
+
+        final originalTotal = number(invoice['total']);
+        final currentTotal =
+            previewBill != null ? number(previewBill['total']) : 0.0;
+        final totalDiff = currentTotal - originalTotal;
+
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720, maxHeight: 780),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.edit_note_rounded,
+                        color: accent,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Edit items · ${invoice['number']}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const Text(
+                              'Add, remove, or adjust quantities of items on this invoice.',
+                              style: TextStyle(fontSize: 12, color: muted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(editDialogContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: lineColor),
+
+                // Toolbar: Add Product & Custom Item
+                Container(
+                  color: const Color(0xFFFBF9F4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      FilledButton.tonalIcon(
+                        onPressed: () async {
+                          final selected =
+                              await _pickProductDialog(context, store);
+                          if (selected != null) {
+                            setDialogState(() {
+                              final existingIndex = linesList.indexWhere(
+                                (l) => l['productId'] == selected['id'],
+                              );
+                              if (existingIndex >= 0) {
+                                final currentQty =
+                                    (linesList[existingIndex]['quantity']
+                                            as num)
+                                        .toDouble();
+                                linesList[existingIndex]['quantity'] =
+                                    currentQty + 1;
+                              } else {
+                                linesList.add({
+                                  'productId': selected['id'],
+                                  'name': selected['name'],
+                                  'price':
+                                      (selected['sellingPrice'] as num).toDouble(),
+                                  'quantity': 1.0,
+                                  'unit': selected['unit'] ?? 'pcs',
+                                  'gst':
+                                      (selected['gstRate'] as num?)?.toDouble() ??
+                                          0.0,
+                                  'discount': {'type': 'amount', 'value': 0},
+                                  'image': selected['image'],
+                                });
+                              }
+                            });
+                          }
+                        },
+                        icon: const Icon(
+                          Icons.add_shopping_cart_rounded,
+                          size: 16,
+                        ),
+                        label: const Text('Add Product'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final custom = await _addCustomItemDialog(context);
+                          if (custom != null) {
+                            setDialogState(() {
+                              linesList.add(custom);
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.playlist_add_rounded, size: 16),
+                        label: const Text('Custom Item'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          await store.saveDraft({
+                            'lines': linesList,
+                            'customer': invoice['customer'] ?? {},
+                            'discount': invoice['discount'] ?? {
+                              'type': 'amount',
+                              'value': 0,
+                            },
+                            'gstEnabled': invoice['gstEnabled'] ?? false,
+                            'taxInclusive': invoice['taxInclusive'] ?? false,
+                            'interstate': invoice['interstate'] ?? false,
+                          });
+                          if (editDialogContext.mounted) {
+                            Navigator.pop(editDialogContext);
+                          }
+                          if (context.mounted) Navigator.pop(context);
+                          if (context.mounted) {
+                            context.go('/pos');
+                            toast(
+                              context,
+                              'Loaded invoice into POS cart to edit in register.',
+                            );
+                          }
+                        },
+                        icon: const Icon(Icons.point_of_sale_rounded, size: 16),
+                        label: const Text('Edit in POS cart'),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${linesList.length} ${linesList.length == 1 ? 'item' : 'items'}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: muted,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: lineColor),
+
+                // Items list
+                Flexible(
+                  child: linesList.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.remove_shopping_cart_outlined,
+                                  size: 48,
+                                  color: muted,
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'No items in this invoice',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: muted,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Use "Add Product" or "Custom Item" above to add items.',
+                                  style: TextStyle(fontSize: 12, color: muted),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          itemCount: linesList.length,
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 12, color: lineColor),
+                          itemBuilder: (context, index) {
+                            final item = linesList[index];
+                            final qty =
+                                (item['quantity'] as num?)?.toDouble() ?? 1.0;
+                            final price =
+                                (item['price'] as num?)?.toDouble() ?? 0.0;
+                            final lineTotal = qty * price;
+                            return Row(
+                              children: [
+                                _invoiceLineThumbnail(item, store),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${item['name']}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 13,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${money(price)} / ${item['unit'] ?? 'pcs'}'
+                                        '${(item['gst'] as num?) != null && (item['gst'] as num) > 0 ? ' · GST ${(item['gst'] as num)}%' : ''}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Stepper
+                                Container(
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: lineColor),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                          minWidth: 30,
+                                          minHeight: 30,
+                                        ),
+                                        icon: const Icon(Icons.remove, size: 15),
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            if (qty > 1) {
+                                              item['quantity'] = qty - 1;
+                                            } else {
+                                              linesList.removeAt(index);
+                                            }
+                                          });
+                                        },
+                                      ),
+                                      InkWell(
+                                        onTap: () async {
+                                          final newQty =
+                                              await _editQuantityDialog(
+                                            context,
+                                            qty,
+                                            item['unit'] ?? 'pcs',
+                                          );
+                                          if (newQty != null && newQty > 0) {
+                                            setDialogState(() {
+                                              item['quantity'] = newQty;
+                                            });
+                                          }
+                                        },
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                          child: Text(
+                                            quantity(qty),
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                          minWidth: 30,
+                                          minHeight: 30,
+                                        ),
+                                        icon: const Icon(Icons.add, size: 15),
+                                        onPressed: () {
+                                          setDialogState(() {
+                                            item['quantity'] = qty + 1;
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                SizedBox(
+                                  width: 75,
+                                  child: Text(
+                                    money(lineTotal),
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Color(0xFFAF4137),
+                                    size: 18,
+                                  ),
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      linesList.removeAt(index);
+                                    });
+                                  },
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                ),
+
+                const Divider(height: 1, color: lineColor),
+
+                // Calculation breakdown summary bar
+                if (previewBill != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    color: const Color(0xFFF9F7F2),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Text(
+                                  'Original: ',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: muted,
+                                  ),
+                                ),
+                                Text(
+                                  money(originalTotal),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                if (totalDiff != 0)
+                                  Pill(
+                                    totalDiff > 0
+                                        ? '+${money(totalDiff)}'
+                                        : '-${money(-totalDiff)}',
+                                    color: totalDiff > 0 ? accent : green,
+                                  ),
+                              ],
+                            ),
+                            if (invoice['gstEnabled'] == true) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                'Subtotal: ${money(previewBill['subtotal'])} · GST: ${money(previewBill['taxTotal'])}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: muted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text(
+                              'Updated Total',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: muted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              money(currentTotal),
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: ink,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                if (calculationError != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    color: const Color(0xFFFFECEC),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFAF4137),
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            calculationError,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFAF4137),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Action buttons
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
+                  child: Row(
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(editDialogContext),
+                        child: const Text('Cancel'),
+                      ),
+                      const Spacer(),
+                      FilledButton.icon(
+                        onPressed: linesList.isEmpty || calculationError != null
+                            ? null
+                            : () async {
+                                final messenger =
+                                    ScaffoldMessenger.maybeOf(context);
+                                try {
+                                  await store.updateInvoiceLines(
+                                    invoice['id'],
+                                    linesList,
+                                  );
+                                  if (editDialogContext.mounted) {
+                                    Navigator.pop(editDialogContext);
+                                  }
+                                  if (messenger != null) {
+                                    messenger.hideCurrentSnackBar();
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Invoice items updated successfully',
+                                        ),
+                                        backgroundColor: ink,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (editDialogContext.mounted) {
+                                    toast(editDialogContext, '$e', error: true);
+                                  }
+                                }
+                              },
+                        icon: const Icon(Icons.check_rounded, size: 17),
+                        label: const Text('Save changes'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Future<Map<String, dynamic>?> _pickProductDialog(
+  BuildContext context,
+  AppStore store,
+) async {
+  String search = '';
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (pickerContext) => StatefulBuilder(
+      builder: (context, setPickerState) {
+        final q = search.trim().toLowerCase();
+        final filtered = store.products.where((p) {
+          if (p['archived'] == true) return false;
+          if (q.isEmpty) return true;
+          final name = (p['name'] ?? '').toString().toLowerCase();
+          final code = (p['code'] ?? '').toString().toLowerCase();
+          final cat = (p['category'] ?? '').toString().toLowerCase();
+          return name.contains(q) || code.contains(q) || cat.contains(q);
+        }).toList();
+
+        return Dialog(
+          insetPadding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520, maxHeight: 600),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 10, 8),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.inventory_2_outlined,
+                        color: accent,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Select product to add',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(pickerContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: TextField(
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: 'Search product by name, code or category…',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onChanged: (val) => setPickerState(() => search = val),
+                  ),
+                ),
+                const Divider(height: 12, color: lineColor),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No products found',
+                            style: TextStyle(color: muted),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          itemCount: filtered.length,
+                          separatorBuilder: (context, index) =>
+                              const Divider(height: 1, color: lineColor),
+                          itemBuilder: (context, i) {
+                            final p = filtered[i];
+                            final stock = store.stockFor(p['id']);
+                            return ListTile(
+                              leading: _invoiceLineThumbnail(
+                                {'productId': p['id'], 'image': p['image']},
+                                store,
+                              ),
+                              title: Text(
+                                '${p['name']}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${p['category'] ?? 'General'} · Stock: ${quantity(stock)} ${p['unit'] ?? 'pcs'}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: stock <= (p['minStock'] ?? 0)
+                                      ? Colors.red.shade700
+                                      : muted,
+                                ),
+                              ),
+                              trailing: Text(
+                                money(p['sellingPrice'] ?? 0),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              onTap: () => Navigator.pop(pickerContext, p),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+Future<Map<String, dynamic>?> _addCustomItemDialog(BuildContext context) async {
+  final nameCtrl = TextEditingController();
+  final priceCtrl = TextEditingController();
+  final qtyCtrl = TextEditingController(text: '1');
+  String unit = 'pcs';
+  double gstRate = 0.0;
+
+  final res = await showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setCustomState) => AlertDialog(
+        title: const Text(
+          'Add custom item',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Item name *'),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: priceCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(labelText: 'Price (₹) *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: qtyCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(labelText: 'Quantity *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: unit,
+                      decoration: const InputDecoration(labelText: 'Unit'),
+                      items: const [
+                        DropdownMenuItem(value: 'pcs', child: Text('pcs')),
+                        DropdownMenuItem(value: 'kg', child: Text('kg')),
+                        DropdownMenuItem(value: 'bag', child: Text('bag')),
+                        DropdownMenuItem(value: 'm', child: Text('m')),
+                        DropdownMenuItem(value: 'ft', child: Text('ft')),
+                        DropdownMenuItem(value: 'box', child: Text('box')),
+                        DropdownMenuItem(value: 'ltr', child: Text('ltr')),
+                      ],
+                      onChanged: (v) => setCustomState(() => unit = v ?? 'pcs'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<double>(
+                initialValue: gstRate,
+                decoration: const InputDecoration(labelText: 'GST Rate'),
+                items: const [
+                  DropdownMenuItem(value: 0.0, child: Text('0% (Exempt / None)')),
+                  DropdownMenuItem(value: 5.0, child: Text('5%')),
+                  DropdownMenuItem(value: 12.0, child: Text('12%')),
+                  DropdownMenuItem(value: 18.0, child: Text('18%')),
+                  DropdownMenuItem(value: 28.0, child: Text('28%')),
+                ],
+                onChanged: (v) => setCustomState(() => gstRate = v ?? 0.0),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final name = nameCtrl.text.trim();
+              final price = double.tryParse(priceCtrl.text.trim());
+              final qty = double.tryParse(qtyCtrl.text.trim());
+              if (name.isEmpty ||
+                  price == null ||
+                  price < 0 ||
+                  qty == null ||
+                  qty <= 0) {
+                return;
+              }
+              Navigator.pop(dialogContext, {
+                'name': name,
+                'price': price,
+                'quantity': qty,
+                'unit': unit,
+                'gst': gstRate,
+                'discount': {'type': 'amount', 'value': 0},
+              });
+            },
+            child: const Text('Add item'),
+          ),
+        ],
+      ),
+    ),
+  );
+  nameCtrl.dispose();
+  priceCtrl.dispose();
+  qtyCtrl.dispose();
+  return res;
+}
+
+Future<double?> _editQuantityDialog(
+  BuildContext context,
+  double current,
+  String unit,
+) async {
+  final ctrl = TextEditingController(
+    text: current.toStringAsFixed(current == current.roundToDouble() ? 0 : 2),
+  );
+  final res = await showDialog<double>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(
+        'Edit quantity ($unit)',
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+      ),
+      content: SizedBox(
+        width: 220,
+        child: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            suffixText: unit,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final val = double.tryParse(ctrl.text.trim());
+            if (val != null && val > 0) {
+              Navigator.pop(dialogContext, val);
+            }
+          },
+          child: const Text('Apply'),
+        ),
+      ],
+    ),
+  );
+  ctrl.dispose();
+  return res;
+}
+
 

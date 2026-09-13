@@ -477,6 +477,63 @@ class AppStore extends ChangeNotifier {
     return invoice;
   }
 
+  Future<Map<String, dynamic>> updateInvoiceLines(
+    String invoiceId,
+    List<Map<String, dynamic>> lines,
+  ) async {
+    if (lines.isEmpty) {
+      throw ArgumentError('Invoice must contain at least one item.');
+    }
+    final invoice = invoices.firstWhere(
+      (i) => i['id'] == invoiceId,
+      orElse: () => throw ArgumentError('Invoice not found.'),
+    );
+    if (invoice['cancelled'] == true) {
+      throw ArgumentError('Cancelled invoices cannot be edited.');
+    }
+
+    final bill = calculateBill(
+      lines: lines,
+      discount: (invoice['discount'] as Map?)?.cast<String, dynamic>() ??
+          {'type': 'amount', 'value': 0},
+      gstEnabled: invoice['gstEnabled'] == true,
+      taxInclusive: invoice['taxInclusive'] == true,
+      interstate: invoice['interstate'] == true,
+    );
+
+    Map<String, dynamic> updated = {};
+    await _commit(() async {
+      final oldMovements =
+          movements.where((m) => m['invoiceId'] == invoiceId).toList();
+      for (final m in oldMovements) {
+        await _db.customStatement(
+          'DELETE FROM records WHERE id = ?',
+          [m['id']],
+        );
+      }
+
+      for (final line in lines) {
+        if (line['productId'] != null) {
+          await _movement(
+            line['productId'] as String,
+            -(line['quantity'] as num),
+            'Sale (Updated bill)',
+            invoiceId: invoiceId,
+          );
+        }
+      }
+
+      updated = {
+        ...invoice,
+        ...bill,
+        'updatedAt': DateTime.now().toIso8601String(),
+      };
+      await _put('invoice', updated);
+    });
+
+    return updated;
+  }
+
   Future<void> recordPayment(
     String invoiceId,
     num amount,
