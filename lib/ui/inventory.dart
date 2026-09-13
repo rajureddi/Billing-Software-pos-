@@ -59,62 +59,75 @@ class _InventoryPageState extends State<InventoryPage> {
           PageHeading(
             'Inventory & stock ledger',
             'Track units, record adjustments, and audit movement history.',
-            action: Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            action: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => receiveStockDialog(context, widget.store),
+                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 17),
+                    label: const Text('Add / Receive stock'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => editProduct(context, widget.store),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add product'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                OutlinedButton.icon(
-                  onPressed: () => receiveStockDialog(context, widget.store),
-                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 17),
-                  label: const Text('Add / Receive stock'),
+                ChoiceChip(
+                  label: Text('Products (${all.length})'),
+                  selected: viewIndex == 0,
+                  onSelected: (_) => setState(() => viewIndex = 0),
                 ),
-                FilledButton.icon(
-                  onPressed: () => editProduct(context, widget.store),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add product'),
+                const SizedBox(width: 10),
+                ChoiceChip(
+                  label: Text(
+                    'Movement Ledger (${widget.store.movements.length})',
+                  ),
+                  selected: viewIndex == 1,
+                  onSelected: (_) => setState(() => viewIndex = 1),
                 ),
               ],
             ),
           ),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              ChoiceChip(
-                label: Text('Products (${all.length})'),
-                selected: viewIndex == 0,
-                onSelected: (_) => setState(() => viewIndex = 0),
-              ),
-              ChoiceChip(
-                label: Text(
-                  'Movement Ledger (${widget.store.movements.length})',
-                ),
-                selected: viewIndex == 1,
-                onSelected: (_) => setState(() => viewIndex = 1),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           if (viewIndex == 0) ...[
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: [
-                Pill('${all.length} active products'),
-                Pill('${cats.length - 1} categories', color: muted),
-                if (shortageCount > 0)
-                  Pill('$shortageCount shortage(s)', color: const Color(0xFFC74343)),
-                FilterChip(
-                  label: const Text('Low stock only'),
-                  selected: lowOnly,
-                  onSelected: (v) => setState(() => lowOnly = v),
-                ),
-                FilterChip(
-                  label: const Text('Shortages / Negative stock only'),
-                  selected: shortageOnly,
-                  onSelected: (v) => setState(() => shortageOnly = v),
-                ),
-              ],
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  Pill('${all.length} active products'),
+                  const SizedBox(width: 8),
+                  Pill('${cats.length - 1} categories', color: muted),
+                  if (shortageCount > 0) ...[
+                    const SizedBox(width: 8),
+                    Pill(
+                      '$shortageCount shortage(s)',
+                      color: const Color(0xFFC74343),
+                    ),
+                  ],
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: const Text('Low stock only'),
+                    selected: lowOnly,
+                    onSelected: (v) => setState(() => lowOnly = v),
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: const Text('Shortages / Negative stock only'),
+                    selected: shortageOnly,
+                    onSelected: (v) => setState(() => shortageOnly = v),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 20),
             Panel(

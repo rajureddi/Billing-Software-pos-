@@ -127,31 +127,35 @@ class _DashboardPageState extends State<DashboardPage> {
           PageHeading(
             'A good day to do business.',
             'Here’s what’s happening at your shop.',
-            action: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton.icon(
-                  onPressed: () => context.go('/pos'),
-                  icon: const Icon(Icons.point_of_sale_outlined, size: 17),
-                  label: const Text('New bill'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => editProduct(context, store),
-                  icon: const Icon(Icons.add_box_outlined, size: 17),
-                  label: const Text('Add product'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => receiveStockDialog(context, store),
-                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 17),
-                  label: const Text('Add stock'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => recordPaymentDialog(context, store),
-                  icon: const Icon(Icons.payments_outlined, size: 17),
-                  label: const Text('Record payment'),
-                ),
-              ],
+            action: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => context.go('/pos'),
+                    icon: const Icon(Icons.point_of_sale_outlined, size: 17),
+                    label: const Text('New bill'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => editProduct(context, store),
+                    icon: const Icon(Icons.add_box_outlined, size: 17),
+                    label: const Text('Add product'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => receiveStockDialog(context, store),
+                    icon: const Icon(Icons.add_shopping_cart_rounded, size: 17),
+                    label: const Text('Add stock'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => recordPaymentDialog(context, store),
+                    icon: const Icon(Icons.payments_outlined, size: 17),
+                    label: const Text('Record payment'),
+                  ),
+                ],
+              ),
             ),
           ),
           _syncStatusBanner(context, store),

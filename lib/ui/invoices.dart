@@ -59,36 +59,40 @@ class _InvoicesPageState extends State<InvoicesPage> {
           PageHeading(
             'Invoices & customer dues',
             'Every sale, customer balance, and payment record.',
-            action: Wrap(
-              spacing: 10,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            action: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  Pill('Outstanding ${money(dues)}', color: accent),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => recordPaymentDialog(context, store),
+                    icon: const Icon(Icons.payments_outlined, size: 17),
+                    label: const Text('Record payment'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
               children: [
-                Pill('Outstanding ${money(dues)}', color: accent),
-                FilledButton.icon(
-                  onPressed: () => recordPaymentDialog(context, store),
-                  icon: const Icon(Icons.payments_outlined, size: 17),
-                  label: const Text('Record payment'),
+                ChoiceChip(
+                  label: Text('Invoices (${store.invoices.length})'),
+                  selected: viewIndex == 0,
+                  onSelected: (_) => setState(() => viewIndex = 0),
+                ),
+                const SizedBox(width: 10),
+                ChoiceChip(
+                  label: Text(
+                    'Customer Balances (${store.customerBalances.where((c) => (c['due'] as double) > 0).length} with dues)',
+                  ),
+                  selected: viewIndex == 1,
+                  onSelected: (_) => setState(() => viewIndex = 1),
                 ),
               ],
             ),
-          ),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              ChoiceChip(
-                label: Text('Invoices (${store.invoices.length})'),
-                selected: viewIndex == 0,
-                onSelected: (_) => setState(() => viewIndex = 0),
-              ),
-              ChoiceChip(
-                label: Text(
-                  'Customer Balances (${store.customerBalances.where((c) => (c['due'] as double) > 0).length} with dues)',
-                ),
-                selected: viewIndex == 1,
-                onSelected: (_) => setState(() => viewIndex = 1),
-              ),
-            ],
           ),
           const SizedBox(height: 20),
           if (viewIndex == 0)
@@ -103,43 +107,49 @@ class _InvoicesPageState extends State<InvoicesPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final f in [
-                        'All invoices',
-                        'Unpaid',
-                        'Paid',
-                        'Cancelled',
-                      ])
-                        ChoiceChip(
-                          label: Text(f),
-                          selected: filter == f,
-                          onSelected: (_) => setState(() => filter = f),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final f in [
+                          'All invoices',
+                          'Unpaid',
+                          'Paid',
+                          'Cancelled',
+                        ]) ...[
+                          ChoiceChip(
+                            label: Text(f),
+                            selected: filter == f,
+                            onSelected: (_) => setState(() => filter = f),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        OutlinedButton.icon(
+                          onPressed: () async {
+                            final r = await showDateRangePicker(
+                              context: context,
+                              firstDate: DateTime(2020),
+                              lastDate:
+                                  DateTime.now().add(const Duration(days: 1)),
+                            );
+                            if (r != null) setState(() => range = r);
+                          },
+                          icon: const Icon(Icons.date_range, size: 17),
+                          label: Text(
+                            range == null
+                                ? 'Date range'
+                                : '${dateLabel(range!.start)} – ${dateLabel(range!.end)}',
+                          ),
                         ),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final r = await showDateRangePicker(
-                            context: context,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime.now().add(const Duration(days: 1)),
-                          );
-                          if (r != null) setState(() => range = r);
-                        },
-                        icon: const Icon(Icons.date_range, size: 17),
-                        label: Text(
-                          range == null
-                              ? 'Date range'
-                              : '${dateLabel(range!.start)} – ${dateLabel(range!.end)}',
-                        ),
-                      ),
-                      if (range != null)
-                        IconButton(
-                          onPressed: () => setState(() => range = null),
-                          icon: const Icon(Icons.close),
-                        ),
-                    ],
+                        if (range != null) ...[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            onPressed: () => setState(() => range = null),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 20),
                   if (items.isEmpty)
