@@ -200,28 +200,46 @@ Future<void> perform(
   Future<void> Function() action, {
   String? success,
 }) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     await action();
-    if (context.mounted && success != null) toast(context, success);
+    if (success != null && messenger != null) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(success),
+          backgroundColor: ink,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   } catch (error) {
-    if (context.mounted) {
-      toast(
-        context,
-        error.toString().replaceFirst('Exception: ', ''),
-        error: true,
+    final msg = error.toString().replaceFirst('Exception: ', '');
+    if (messenger != null) {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: const Color(0xFFAF4137),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
 }
 
-void toast(BuildContext context, String message, {bool error = false}) =>
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: error ? const Color(0xFFAF4137) : ink,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+void toast(BuildContext context, String message, {bool error = false}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(message),
+      backgroundColor: error ? const Color(0xFFAF4137) : ink,
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
+}
 Future<bool> confirm(
   BuildContext context,
   String title,

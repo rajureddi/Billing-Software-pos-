@@ -767,14 +767,32 @@ Future<void> recordInvoicePayment(
           child: const Text('Back'),
         ),
         FilledButton(
-          onPressed: () => perform(dialog, () async {
-            await store.recordPayment(
-              invoice['id'],
-              double.parse(amount.text),
-              method,
-            );
-            if (dialog.mounted) Navigator.pop(dialog);
-          }, success: 'Payment recorded'),
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.maybeOf(dialog);
+            try {
+              final val = double.parse(amount.text);
+              await store.recordPayment(invoice['id'], val, method);
+              if (dialog.mounted) Navigator.pop(dialog);
+              if (messenger != null) {
+                messenger.hideCurrentSnackBar();
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Payment recorded'),
+                    backgroundColor: ink,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            } catch (error) {
+              if (dialog.mounted) {
+                toast(
+                  dialog,
+                  error.toString().replaceFirst('Exception: ', ''),
+                  error: true,
+                );
+              }
+            }
+          },
           child: const Text('Save payment'),
         ),
       ],
@@ -821,8 +839,8 @@ Future<void> recordPaymentDialog(
 
   await showDialog(
     context: context,
-    builder: (dialog) => StatefulBuilder(
-      builder: (dialog, set) => AlertDialog(
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, set) => AlertDialog(
         title: const Text('Record customer payment'),
         content: SizedBox(
           width: 440,
@@ -900,21 +918,43 @@ Future<void> recordPaymentDialog(
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialog),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => perform(dialog, () async {
-              final val = double.parse(amount.text);
-              await store.recordPayment(selectedId, val, method);
-              if (dialog.mounted) Navigator.pop(dialog);
-            }, success: 'Payment recorded'),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.maybeOf(dialogContext);
+              try {
+                final val = double.parse(amount.text);
+                await store.recordPayment(selectedId, val, method);
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (messenger != null) {
+                  messenger.hideCurrentSnackBar();
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Payment recorded'),
+                      backgroundColor: ink,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              } catch (error) {
+                if (dialogContext.mounted) {
+                  toast(
+                    dialogContext,
+                    error.toString().replaceFirst('Exception: ', ''),
+                    error: true,
+                  );
+                }
+              }
+            },
             child: const Text('Save payment'),
           ),
         ],
       ),
     ),
   );
+  amount.dispose();
 }
 
 Future<void> cancelSale(
