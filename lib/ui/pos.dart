@@ -487,7 +487,7 @@ class _PosPageState extends State<PosPage> {
                             onTap: () {
                               if (!selected) {
                                 addProduct(p);
-                              } else {
+                              } else if (cartQty <= 1) {
                                 lines.removeAt(lineIndex);
                                 changed();
                               }
