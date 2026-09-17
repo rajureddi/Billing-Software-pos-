@@ -39,6 +39,9 @@ class AppStore extends ChangeNotifier {
   List<Map<String, dynamic>> _records = [];
   Map<String, double>? _cachedStockMap;
   Map<String, double>? _cachedPaidMap;
+  List<Map<String, dynamic>>? _cachedCustomerBalances;
+  List<Map<String, dynamic>>? _cachedMovementsWithProducts;
+  List<String>? _cachedCategories;
   String get deviceId =>
       (_kind('local').firstWhere(
                 (r) => r['id'] == 'device',
@@ -55,22 +58,30 @@ class AppStore extends ChangeNotifier {
       )
       .toList();
   List<Map<String, dynamic>> get products => _kind('product');
-  List<Map<String, dynamic>> get invoices => _kind('invoice').map((invoice) {
-    final cancellation = _kind('cancellation')
-        .where((c) => c['invoiceId'] == invoice['id'])
-        .firstOrNull;
-    return {
-      ...invoice,
-      if (cancellation != null) ...{
-        'cancelled': true,
-        'cancellationReason': cancellation['reason'],
-        'cancelledAt': cancellation['createdAt'],
-      },
-    };
-  }).toList();
-  List<Map<String, dynamic>> get payments => _kind('payment');
-  List<Map<String, dynamic>> get movements => _kind('movement');
-  List<Map<String, dynamic>> get customers => _kind('customer');
+  List<Map<String, dynamic>> get invoices => _kind('invoice')
+      .where((inv) => inv['deleted'] != true)
+      .map((invoice) {
+        final cancellation = _kind('cancellation')
+            .where(
+              (c) => c['invoiceId'] == invoice['id'] && c['deleted'] != true,
+            )
+            .firstOrNull;
+        return {
+          ...invoice,
+          if (cancellation != null) ...{
+            'cancelled': true,
+            'cancellationReason': cancellation['reason'],
+            'cancelledAt': cancellation['createdAt'],
+          },
+        };
+      })
+      .toList();
+  List<Map<String, dynamic>> get payments =>
+      _kind('payment').where((p) => p['deleted'] != true).toList();
+  List<Map<String, dynamic>> get movements =>
+      _kind('movement').where((m) => m['deleted'] != true).toList();
+  List<Map<String, dynamic>> get customers =>
+      _kind('customer').where((c) => c['deleted'] != true).toList();
   List<Map<String, dynamic>> get conflicts => _kind('conflict');
   Map<String, dynamic> get settings => {
     ...defaultSettings,
@@ -124,6 +135,9 @@ class AppStore extends ChangeNotifier {
   Future<void> _reload() async {
     _cachedStockMap = null;
     _cachedPaidMap = null;
+    _cachedCustomerBalances = null;
+    _cachedMovementsWithProducts = null;
+    _cachedCategories = null;
     final rows = await _db.customSelect('SELECT * FROM records').get();
     _records = rows
         .map(
@@ -220,8 +234,9 @@ class AppStore extends ChangeNotifier {
         ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
 
   List<Map<String, dynamic>> get allMovementsWithProducts {
+    if (_cachedMovementsWithProducts != null) return _cachedMovementsWithProducts!;
     final prodMap = {for (final p in products) p['id']: p};
-    return movements.map((m) {
+    return _cachedMovementsWithProducts = movements.map((m) {
       final p = prodMap[m['productId']];
       return {
         ...m,
@@ -234,6 +249,7 @@ class AppStore extends ChangeNotifier {
   }
 
   List<Map<String, dynamic>> get customerBalances {
+    if (_cachedCustomerBalances != null) return _cachedCustomerBalances!;
     final Map<String, Map<String, dynamic>> map = {};
     for (final customer in customers) {
       final id = customer['id'] as String;
@@ -288,11 +304,12 @@ class AppStore extends ChangeNotifier {
         }
       }
     }
-    return map.values.toList()
+    return _cachedCustomerBalances = map.values.toList()
       ..sort((a, b) => (b['due'] as double).compareTo(a['due'] as double));
   }
 
   List<String> get categories {
+    if (_cachedCategories != null) return _cachedCategories!;
     final map = <String, String>{};
     for (final p in products) {
       if (p['archived'] == true) continue;
@@ -323,7 +340,7 @@ class AppStore extends ChangeNotifier {
     }
     final list = map.values.toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return list;
+    return _cachedCategories = list;
   }
 
   String normalizeCategory(String input) {
@@ -626,6 +643,7 @@ class AppStore extends ChangeNotifier {
       orElse: () => throw ArgumentError('Invoice not found.'),
     );
     await _commit(() async {
+      final nowStr = DateTime.now().toIso8601String();
       final relatedMovements =
           movements.where((m) => m['invoiceId'] == invoiceId).toList();
       final relatedPayments =
@@ -639,31 +657,49 @@ class AppStore extends ChangeNotifier {
               line['productId'] as String,
               line['quantity'] as num,
               'Stock restored: deleted invoice ${invoice['number']}',
+              invoiceId: invoiceId,
             );
           }
         }
       }
 
+      // Mark all related movements as deleted so stock is restored and sync deletes them
       for (final m in relatedMovements) {
-        await _db.customStatement(
-          'DELETE FROM records WHERE id = ?',
-          [m['id']],
-        );
+        await _put('movement', {
+          ...m,
+          'deleted': true,
+          'deletedAt': nowStr,
+        }, dirty: true);
       }
+
+      // Mark all related payments as deleted so dues/balances update and sync deletes them
       for (final p in relatedPayments) {
-        await _db.customStatement(
-          'DELETE FROM records WHERE id = ?',
-          [p['id']],
-        );
+        await _put('payment', {
+          ...p,
+          'deleted': true,
+          'deletedAt': nowStr,
+        }, dirty: true);
       }
-      await _db.customStatement(
-        'DELETE FROM records WHERE id = ?',
-        ['cancel-$invoiceId'],
+
+      // Mark cancellation if present as deleted
+      final cancelRecord = _kind('cancellation').firstWhere(
+        (c) => c['id'] == 'cancel-$invoiceId' || c['invoiceId'] == invoiceId,
+        orElse: () => {},
       );
-      await _db.customStatement(
-        'DELETE FROM records WHERE id = ?',
-        [invoiceId],
-      );
+      if (cancelRecord.isNotEmpty) {
+        await _put('cancellation', {
+          ...cancelRecord,
+          'deleted': true,
+          'deletedAt': nowStr,
+        }, dirty: true);
+      }
+
+      // Mark invoice itself as deleted
+      await _put('invoice', {
+        ...invoice,
+        'deleted': true,
+        'deletedAt': nowStr,
+      }, dirty: true);
     });
   }
 
@@ -866,6 +902,29 @@ class AppStore extends ChangeNotifier {
         'UPDATE records SET base_revision=? WHERE id=?',
         [record['revision'] ?? 1, record['id']],
       );
+
+      // When an invoice is remotely deleted, also ensure all local movements and payments for that invoice are tombstoned
+      if (record['kind'] == 'invoice' && payload['deleted'] == true) {
+        final nowStr = DateTime.now().toIso8601String();
+        final localMovs =
+            movements.where((m) => m['invoiceId'] == record['id']).toList();
+        for (final m in localMovs) {
+          await _put('movement', {
+            ...m,
+            'deleted': true,
+            'deletedAt': nowStr,
+          }, dirty: false);
+        }
+        final localPmts =
+            payments.where((p) => p['invoiceId'] == record['id']).toList();
+        for (final p in localPmts) {
+          await _put('payment', {
+            ...p,
+            'deleted': true,
+            'deletedAt': nowStr,
+          }, dirty: false);
+        }
+      }
     }
   });
   Future<void> resolveConflict(

@@ -22,42 +22,54 @@ class _InvoicesPageState extends State<InvoicesPage> {
   DateTimeRange? range;
   @override
   Widget build(BuildContext context) {
-    final store = widget.store;
-    final items =
-        store.invoices.where((i) {
-          final due = store.dueFor(i['id']);
-          final date = DateTime.parse(i['createdAt']);
-          return '${i['number']} ${(i['customer'] as Map)['name'] ?? ''}'
-                  .toLowerCase()
-                  .contains(search.toLowerCase()) &&
-              (filter == 'All invoices' ||
-                  filter == 'Unpaid' && due > 0 ||
-                  filter == 'Paid' && due == 0 && i['cancelled'] != true ||
-                  filter == 'Cancelled' && i['cancelled'] == true) &&
-              (range == null ||
-                  (!date.isBefore(range!.start) &&
-                      date.isBefore(range!.end.add(const Duration(days: 1)))));
-        }).toList()..sort(
-          (a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'),
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, _) {
+        final store = widget.store;
+        final items =
+            store.invoices.where((i) {
+              final due = store.dueFor(i['id']);
+              final createdStr = i['createdAt']?.toString();
+              final date = createdStr != null
+                  ? DateTime.tryParse(createdStr) ??
+                      DateTime.fromMillisecondsSinceEpoch(0)
+                  : DateTime.fromMillisecondsSinceEpoch(0);
+              final cust = i['customer'] is Map ? (i['customer'] as Map) : const {};
+              final custName = (cust['name'] ?? '').toString();
+              final invNum = (i['number'] ?? '').toString();
+              return '$invNum $custName'
+                      .toLowerCase()
+                      .contains(search.toLowerCase()) &&
+                  (filter == 'All invoices' ||
+                      filter == 'Unpaid' && due > 0 ||
+                      filter == 'Paid' && due == 0 && i['cancelled'] != true ||
+                      filter == 'Cancelled' && i['cancelled'] == true) &&
+                  (range == null ||
+                      (!date.isBefore(range!.start) &&
+                          date.isBefore(
+                            range!.end.add(const Duration(days: 1)),
+                          )));
+            }).toList()..sort(
+              (a, b) => '${b['createdAt'] ?? ''}'.compareTo('${a['createdAt'] ?? ''}'),
+            );
+        final dues = store.invoices.fold<double>(
+          0,
+          (sum, i) => sum + store.dueFor(i['id']),
         );
-    final dues = store.invoices.fold<double>(
-      0,
-      (sum, i) => sum + store.dueFor(i['id']),
-    );
-    final customersWithDues = store.customerBalances
-        .where(
-          (c) =>
-              '${c['name']} ${c['phone']}'.toLowerCase().contains(
-                customerSearch.toLowerCase(),
-              ),
-        )
-        .toList();
+        final customersWithDues = store.customerBalances
+            .where(
+              (c) =>
+                  '${c['name']} ${c['phone']}'.toLowerCase().contains(
+                    customerSearch.toLowerCase(),
+                  ),
+            )
+            .toList();
 
-    final isCompact = MediaQuery.sizeOf(context).width < 700;
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(isCompact ? 14 : 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        final isCompact = MediaQuery.sizeOf(context).width < 700;
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(isCompact ? 14 : 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           PageHeading(
             'Invoices & customer dues',
@@ -186,9 +198,9 @@ class _InvoicesPageState extends State<InvoicesPage> {
                             ),
                           ),
                           title: Text(
-                            '${(i['customer'] as Map)['name'] ?? ''}'.isEmpty
+                            ((i['customer'] is Map ? (i['customer'] as Map)['name'] : null)?.toString().trim() ?? '').isEmpty
                                 ? 'Walk-in customer'
-                                : '${(i['customer'] as Map)['name']}',
+                                : (i['customer'] as Map)['name'].toString(),
                             style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
@@ -354,6 +366,8 @@ class _InvoicesPageState extends State<InvoicesPage> {
         ],
       ),
     );
+      },
+    );
   }
 }
 
@@ -371,8 +385,14 @@ Future<void> showInvoice(
         builder: (dialogCtx, _) {
           final invoice = store.invoices.firstWhere(
             (i) => i['id'] == initial['id'],
-            orElse: () => initial,
+            orElse: () => const {},
           );
+          if (invoice.isEmpty || invoice['deleted'] == true) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+            });
+            return const SizedBox.shrink();
+          }
           final due = store.dueFor(invoice['id']);
           return Dialog(
             insetPadding: const EdgeInsets.all(18),
@@ -972,65 +992,78 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Record customer payment'),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DropdownButtonFormField<String>(
-                initialValue: selectedId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Select unpaid invoice',
-                ),
-                items: [
-                  for (final inv in widget.unpaid)
-                    DropdownMenuItem(
-                      value: inv['id'] as String,
-                      child: Text(
-                        '${inv['number']} · ${(inv['customer'] as Map?)?['name'] ?? 'Walk-in'} (Due: ${money(widget.store.dueFor(inv['id']))})',
-                        overflow: TextOverflow.ellipsis,
-                      ),
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, _) {
+        final currentUnpaid = widget.store.invoices
+            .where((i) => i['cancelled'] != true && widget.store.dueFor(i['id']) > 0)
+            .toList();
+        if (currentUnpaid.isNotEmpty && !currentUnpaid.any((i) => i['id'] == selectedId)) {
+          selectedId = currentUnpaid.first['id'] as String;
+          amount.text = widget.store.dueFor(selectedId).toStringAsFixed(2);
+        }
+
+        return AlertDialog(
+          title: const Text('Record customer payment'),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: currentUnpaid.any((i) => i['id'] == selectedId)
+                        ? selectedId
+                        : null,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Select unpaid invoice',
                     ),
-                ],
-                onChanged: (id) {
-                  if (id == null) return;
-                  setState(() {
-                    selectedId = id;
-                    amount.text = widget.store.dueFor(id).toStringAsFixed(2);
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: canvas,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Current balance due:',
-                        style: TextStyle(color: muted, fontSize: 12),
-                      ),
+                    items: [
+                      for (final inv in currentUnpaid)
+                        DropdownMenuItem(
+                          value: inv['id'] as String,
+                          child: Text(
+                            '${inv['number']} · ${(inv['customer'] as Map?)?['name'] ?? 'Walk-in'} (Due: ${money(widget.store.dueFor(inv['id']))})',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (id) {
+                      if (id == null) return;
+                      setState(() {
+                        selectedId = id;
+                        amount.text = widget.store.dueFor(id).toStringAsFixed(2);
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: canvas,
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    Text(
-                      money(widget.store.dueFor(selectedId)),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                        color: accent,
-                      ),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Current balance due:',
+                            style: TextStyle(color: muted, fontSize: 12),
+                          ),
+                        ),
+                        Text(
+                          money(widget.store.dueFor(selectedId)),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: accent,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
               const SizedBox(height: 16),
               field('Amount received (₹)', amount, numeric: true),
               DropdownButtonFormField<String>(
@@ -1083,6 +1116,8 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
           child: const Text('Save payment'),
         ),
       ],
+    );
+      },
     );
   }
 }

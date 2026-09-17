@@ -20,7 +20,10 @@ class _DashboardPageState extends State<DashboardPage> {
   int days = 1;
   @override
   Widget build(BuildContext context) {
-    final store = widget.store;
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, _) {
+        final store = widget.store;
     final now = DateTime.now();
     final start = DateTime(
       now.year,
@@ -524,6 +527,8 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
+    );
+      },
     );
   }
 

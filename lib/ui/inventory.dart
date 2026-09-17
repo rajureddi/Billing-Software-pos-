@@ -20,7 +20,10 @@ class _InventoryPageState extends State<InventoryPage> {
   bool lowOnly = false, shortageOnly = false;
   @override
   Widget build(BuildContext context) {
-    final all = widget.store.products
+    return ListenableBuilder(
+      listenable: widget.store,
+      builder: (context, _) {
+        final all = widget.store.products
         .where((p) => p['archived'] != true)
         .toList();
     final existingCats = widget.store.categories
@@ -454,6 +457,8 @@ class _InventoryPageState extends State<InventoryPage> {
             ),
         ],
       ),
+    );
+      },
     );
   }
 }

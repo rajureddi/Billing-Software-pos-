@@ -240,5 +240,102 @@ void main() {
       await store.close();
     }
   });
+
+  test('Multi-device payment recording updates dues and status across devices', () async {
+    final counter1 = await AppStore.openForTesting(NativeDatabase.memory());
+    final counter2 = await AppStore.openForTesting(NativeDatabase.memory());
+
+    try {
+      await counter1.saveProduct({'id': 'rod', 'name': 'Iron Rod', 'price': 200}, openingStock: 20);
+      await counter2.applyRemoteRecords(counter1.exportSyncRecords());
+
+      // Counter 1 creates an invoice with ₹100 partial payment (due ₹300)
+      final inv = await counter1.finalizeInvoice(
+        lines: [{'productId': 'rod', 'name': 'Iron Rod', 'price': 200, 'quantity': 2, 'unit': 'pcs', 'gst': 0}],
+        customer: {'name': 'Suresh', 'phone': '9123456780'},
+        discount: {},
+        paymentEntries: [{'method': 'Cash', 'amount': 100}],
+        gstEnabled: false,
+        taxInclusive: false,
+        interstate: false,
+      );
+
+      expect(counter1.dueFor(inv['id']), 300);
+
+      // Counter 2 receives the invoice
+      await counter2.applyRemoteRecords(counter1.exportSyncRecords());
+      expect(counter2.invoices.length, 1);
+      expect(counter2.dueFor(inv['id']), 300);
+
+      // Counter 2 records remaining ₹300 payment
+      await counter2.recordPayment(inv['id'], 300, 'UPI');
+      expect(counter2.dueFor(inv['id']), 0);
+
+      // Counter 1 syncs and receives the payment from Counter 2
+      final paymentRecords = counter2.exportSyncRecords().where((r) => r['kind'] == 'payment').toList();
+      await counter1.applyRemoteRecords(paymentRecords);
+
+      // Counter 1 now shows invoice is fully paid (due = 0)
+      expect(counter1.paidFor(inv['id']), 400);
+      expect(counter1.dueFor(inv['id']), 0);
+      final suresh = counter1.customerBalances.firstWhere((c) => c['name'] == 'Suresh');
+      expect(suresh['due'], 0.0);
+    } finally {
+      await counter1.close();
+      await counter2.close();
+    }
+  });
+
+  test('Multi-device invoice deletion removes invoice, payments, and restores product stock on remote devices', () async {
+    final counter1 = await AppStore.openForTesting(NativeDatabase.memory());
+    final counter2 = await AppStore.openForTesting(NativeDatabase.memory());
+
+    try {
+      await counter1.saveProduct({'id': 'cement', 'name': 'Cement', 'price': 350}, openingStock: 50);
+      await counter2.applyRemoteRecords(counter1.exportSyncRecords());
+
+      // Counter 1 creates an invoice selling 10 bags with ₹3500 payment
+      final inv = await counter1.finalizeInvoice(
+        lines: [{'productId': 'cement', 'name': 'Cement', 'price': 350, 'quantity': 10, 'unit': 'bag', 'gst': 0}],
+        customer: {'name': 'Ramesh', 'phone': '9876543210'},
+        discount: {},
+        paymentEntries: [{'method': 'Cash', 'amount': 3500}],
+        gstEnabled: false,
+        taxInclusive: false,
+        interstate: false,
+      );
+
+      // Counter 2 syncs the sale
+      await counter2.applyRemoteRecords(counter1.exportSyncRecords());
+      expect(counter1.stockFor('cement'), 40);
+      expect(counter2.stockFor('cement'), 40);
+      expect(counter2.invoices.length, 1);
+
+      // Acknowledge sync on counter 1 so dirty is 0
+      await counter1.acknowledgeSync(counter1.exportSyncRecords());
+
+      // Counter 1 deletes the invoice
+      await counter1.deleteInvoice(inv['id']);
+      expect(counter1.invoices.length, 0);
+      expect(counter1.stockFor('cement'), 50);
+
+      // Counter 1 exports the deletion tombstone records
+      final deleteRecords = counter1.exportSyncRecords();
+      expect(deleteRecords.any((r) => r['kind'] == 'invoice' && r['payload']['deleted'] == true), true);
+      expect(deleteRecords.any((r) => r['kind'] == 'movement' && r['payload']['deleted'] == true), true);
+      expect(deleteRecords.any((r) => r['kind'] == 'payment' && r['payload']['deleted'] == true), true);
+
+      // Counter 2 receives and applies the deletion records
+      await counter2.applyRemoteRecords(deleteRecords);
+
+      // Counter 2 now has the invoice deleted, payments removed, and stock fully restored!
+      expect(counter2.invoices.length, 0);
+      expect(counter2.stockFor('cement'), 50);
+      expect(counter2.paidFor(inv['id']), 0);
+    } finally {
+      await counter1.close();
+      await counter2.close();
+    }
+  });
 }
 

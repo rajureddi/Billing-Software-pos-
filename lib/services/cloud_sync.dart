@@ -188,7 +188,16 @@ class CloudSync extends ChangeNotifier with WidgetsBindingObserver {
           schema: 'public',
           table: 'billing_records',
           callback: (payload) {
-            // When any peer device inserts or updates records, pull changes without pushing
+            try {
+              final newRec = payload.newRecord;
+              if (newRec.isNotEmpty &&
+                  newRec['id'] != null &&
+                  newRec['kind'] != null &&
+                  newRec['payload'] != null) {
+                applyRemote([Map<String, dynamic>.from(newRec)]);
+              }
+            } catch (_) {}
+            // Pull changes to ensure full consistency
             _pullRemoteUpdates();
           },
         ).subscribe();
