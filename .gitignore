@@ -13,6 +13,9 @@
 migrate_working_dir/
 *.tmp
 *.bak
+.env
+.env.*
+*.env
 
 # IDE & Editor files
 *.iml

@@ -358,14 +358,13 @@ class ShopShell extends ConsumerWidget {
                                 ),
                               ),
                             ),
-                            if (wide)
                               AnimatedBuilder(
                                 animation: cloudFor(store),
                                 builder: (context, _) {
                                   final cloud = cloudFor(store);
                                   final Color dotColor = cloud.busy
                                       ? accent
-                                      : !cloud.configured || !cloud.signedIn
+                                      : !cloud.configured
                                           ? muted
                                           : cloud.error != null
                                               ? const Color(0xFFC74343)
@@ -374,14 +373,35 @@ class ShopShell extends ConsumerWidget {
                                                   : green;
                                   final String label = cloud.busy
                                       ? 'Syncing…'
-                                      : !cloud.configured || !cloud.signedIn
+                                      : !cloud.configured
                                           ? 'Local mode'
                                           : store.pendingCount > 0
                                               ? 'Sync pending'
                                               : 'Cloud synced';
+                                  if (!wide) {
+                                    return IconButton(
+                                      tooltip: label,
+                                      visualDensity: VisualDensity.compact,
+                                      onPressed: () {
+                                        if (cloud.configured) {
+                                          cloud.sync();
+                                        } else {
+                                          context.go('/settings');
+                                        }
+                                      },
+                                      icon: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: dotColor,
+                                        ),
+                                      ),
+                                    );
+                                  }
                                   return TextButton.icon(
                                     onPressed: () {
-                                      if (cloud.configured && cloud.signedIn) {
+                                      if (cloud.configured) {
                                         cloud.sync();
                                       } else {
                                         context.go('/settings');

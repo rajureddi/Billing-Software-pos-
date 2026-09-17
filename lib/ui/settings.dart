@@ -1,11 +1,13 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../data/app_store.dart';
 import '../services/cloud_sync.dart';
+import '../services/image_optimizer.dart';
 import 'common.dart';
 
 
@@ -23,7 +25,13 @@ class _SettingsPageState extends State<SettingsPage> {
   late String paper;
   String logo = '';
   bool saving = false;
-  final email = TextEditingController(), password = TextEditingController();
+  late final TextEditingController supabaseUrlController;
+  late final TextEditingController supabaseKeyController;
+  bool showCloudSetup = false;
+  bool testingConnection = false;
+  String? connectionFeedback;
+  bool? connectionSuccess;
+
   @override
   void initState() {
     super.initState();
@@ -48,7 +56,16 @@ class _SettingsPageState extends State<SettingsPage> {
     taxInclusive = s['taxInclusive'] == true;
     paper = s['paper'] ?? 'A4';
     logo = s['logoBase64'] ?? '';
-    cloudFor(widget.store);
+    final cloud = cloudFor(widget.store);
+    final initialUrl = ((s['supabaseUrl'] as String?) ?? '').trim();
+    final initialKey = ((s['supabaseAnonKey'] as String?) ?? '').trim();
+    supabaseUrlController = TextEditingController(
+      text: initialUrl.isNotEmpty ? initialUrl : cloud.url,
+    );
+    supabaseKeyController = TextEditingController(
+      text: initialKey.isNotEmpty ? initialKey : cloud.anonKey,
+    );
+    showCloudSetup = !cloud.configured;
   }
 
   @override
@@ -56,8 +73,8 @@ class _SettingsPageState extends State<SettingsPage> {
     for (final c in cs.values) {
       c.dispose();
     }
-    email.dispose();
-    password.dispose();
+    supabaseUrlController.dispose();
+    supabaseKeyController.dispose();
     super.dispose();
   }
 
@@ -74,13 +91,21 @@ class _SettingsPageState extends State<SettingsPage> {
           'For GST billing, enter a 15-character GSTIN and shop state.',
         );
       }
+      final url = supabaseUrlController.text.trim();
+      final key = supabaseKeyController.text.trim();
       await widget.store.saveSettings({
         for (final k in cs.keys) k: cs[k]!.text.trim(),
         'gstEnabled': gst,
         'taxInclusive': taxInclusive,
         'paper': paper,
         'logoBase64': logo,
+        'supabaseUrl': url,
+        'supabaseAnonKey': key,
       });
+      final cloud = cloudFor(widget.store);
+      if (url != cloud.url || key != cloud.anonKey) {
+        await cloud.configure(url: url, anonKey: key);
+      }
     }, success: 'Shop settings saved');
     if (mounted) setState(() => saving = false);
   }
@@ -152,16 +177,15 @@ class _SettingsPageState extends State<SettingsPage> {
                           onPressed: () => perform(context, () async {
                             final result = await FilePicker.pickFile(
                               type: FileType.custom,
-                              allowedExtensions: ['png', 'jpg', 'jpeg'],
+                              allowedExtensions: ['png', 'jpg', 'jpeg', 'webp'],
                             );
                             if (result == null) return;
                             final bytes = await result.readAsBytes();
-                            if (bytes.length > 1000000) {
-                              throw ArgumentError(
-                                'Choose an image smaller than 1 MB.',
-                              );
-                            }
-                            setState(() => logo = base64Encode(bytes));
+                            final opt = await ImageOptimizer.optimize(
+                              bytes,
+                              maxDimension: 400,
+                            );
+                            setState(() => logo = opt.base64);
                           }),
                           child: const Text('Upload logo'),
                         ),
@@ -321,7 +345,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(width: 10),
                       const Expanded(
                         child: Text(
-                          'Cloud & devices',
+                          'Cloud & multi-device sync',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -329,14 +353,24 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                       Pill(
-                        cloud.status,
-                        color: cloud.error == null ? green : accent,
+                        cloud.busy
+                            ? 'Syncing…'
+                            : !cloud.configured
+                                ? 'Local mode'
+                                : cloud.error != null
+                                    ? 'Offline · Retrying'
+                                    : 'Direct sync active',
+                        color: !cloud.configured
+                            ? muted
+                            : cloud.error != null
+                                ? accent
+                                : green,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   const Text(
-                    'Your bills and inventory remain safely stored on this device without an internet connection.',
+                    'All your inventory, product photos, stock movements, and invoices sync in real-time across iOS, Android, Windows, and Web. If internet disconnects, local billing and printing continue smoothly.',
                     style: TextStyle(
                       color: muted,
                       fontSize: 12,
@@ -344,68 +378,289 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  if (!cloud.configured)
-                    const Text(
-                      'Cloud is not connected yet. To enable it, configure a Supabase project URL and publishable/anon key when building the app, and apply the included database migration. No cloud credentials are stored in this project.',
-                      style: TextStyle(fontSize: 12, height: 1.7),
-                    ),
-                  if (cloud.configured && !cloud.signedIn) ...[
-                    field('Owner email', email),
-                    TextField(
-                      controller: password,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Password'),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 12,
-                      children: [
-                        FilledButton(
-                          onPressed: cloud.busy
-                              ? null
-                              : () => perform(
-                                  context,
-                                  () => cloud.signIn(email.text, password.text),
+
+                  // Connection Config Box (collapsible or shown if unconfigured)
+                  if (!cloud.configured || showCloudSetup) ...[
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: canvas,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: lineColor),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.hub_outlined, color: green, size: 20),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Text(
+                                  'Supabase Cloud Connection',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
                                 ),
-                          child: const Text('Sign in'),
-                        ),
-                        OutlinedButton(
+                              ),
+                              if (cloud.configured)
+                                TextButton(
+                                  onPressed: () =>
+                                      setState(() => showCloudSetup = false),
+                                  child: const Text('Hide settings'),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Enter your Supabase project credentials. All devices connect to the same project database.',
+                            style: TextStyle(fontSize: 11, color: muted),
+                          ),
+                          const SizedBox(height: 14),
+                          field('Supabase Project URL', supabaseUrlController),
+                          field('Publishable / Anon API Key', supabaseKeyController),
+                          if (connectionFeedback != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    connectionSuccess == true
+                                        ? Icons.check_circle_outline
+                                        : Icons.error_outline,
+                                    size: 16,
+                                    color: connectionSuccess == true
+                                        ? green
+                                        : const Color(0xFFC74343),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      connectionFeedback!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: connectionSuccess == true
+                                            ? green
+                                            : const Color(0xFFC74343),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 8,
+                            children: [
+                              FilledButton.icon(
+                                onPressed: cloud.busy
+                                    ? null
+                                    : () => perform(context, () async {
+                                        final url =
+                                            supabaseUrlController.text.trim();
+                                        final key =
+                                            supabaseKeyController.text.trim();
+                                        if (url.isEmpty || key.isEmpty) {
+                                          throw ArgumentError(
+                                            'Enter both Supabase URL and Publishable Key.',
+                                          );
+                                        }
+                                        await cloud.configure(
+                                          url: url,
+                                          anonKey: key,
+                                        );
+                                        await widget.store.saveSettings({
+                                          'supabaseUrl': url,
+                                          'supabaseAnonKey': key,
+                                        });
+                                        setState(() => showCloudSetup = false);
+                                      },
+                                      success: 'Connected to Supabase project!'),
+                                icon: const Icon(Icons.link, size: 16),
+                                label: const Text('Save & Connect'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: testingConnection
+                                    ? null
+                                    : () async {
+                                        setState(() {
+                                          testingConnection = true;
+                                          connectionFeedback = null;
+                                        });
+                                        final ok =
+                                            await CloudSync.testConnection(
+                                          supabaseUrlController.text,
+                                          supabaseKeyController.text,
+                                        );
+                                        if (mounted) {
+                                          setState(() {
+                                            testingConnection = false;
+                                            connectionSuccess = ok;
+                                            connectionFeedback = ok
+                                                ? 'Connection successful! Cloud backend is reachable.'
+                                                : 'Could not connect. Check the URL and Publishable Key.';
+                                          });
+                                        }
+                                      },
+                                icon: testingConnection
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : const Icon(Icons.network_check_rounded,
+                                        size: 16),
+                                label: Text(testingConnection
+                                    ? 'Testing…'
+                                    : 'Test Connection'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    _showImportPairingDialog(context, cloud),
+                                icon: const Icon(Icons.qr_code_scanner, size: 16),
+                                label: const Text('Import Pairing Code'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ],
+
+                  // Direct Sync Active Card and Actions
+                  if (cloud.configured) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF2F8F1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFC7E2C3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: green.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(9),
+                            ),
+                            child: const Icon(
+                              Icons.cloud_done_rounded,
+                              color: green,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Direct Sync Active',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: green,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Device: ${widget.store.deviceId.substring(0, 8)} · '
+                                  '${cloud.pending == 0 ? "All changes synced" : "${cloud.pending} pending"} · '
+                                  '${cloud.lastSynced != null ? "Synced ${cloud.lastSynced!.hour.toString().padLeft(2, '0')}:${cloud.lastSynced!.minute.toString().padLeft(2, '0')}" : "Instant real-time sync"}',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        FilledButton.icon(
                           onPressed: cloud.busy
                               ? null
                               : () => perform(context, () async {
-                                  final result = await cloud.signUp(
-                                    email.text,
-                                    password.text,
-                                  );
-                                  if (context.mounted) toast(context, result);
-                                }),
-                          child: const Text('Create owner account'),
+                                  await cloud.sync();
+                                }, success: 'Synchronized with cloud!'),
+                          icon: const Icon(Icons.sync_rounded, size: 16),
+                          label: Text(cloud.busy ? 'Syncing…' : 'Sync now'),
+                        ),
+                        FilledButton.tonalIcon(
+                          onPressed: () => _showPairingDialog(context, cloud),
+                          icon: const Icon(Icons.qr_code_2_rounded, size: 17),
+                          label: const Text('Link Another Device'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              _showImportPairingDialog(context, cloud),
+                          icon: const Icon(Icons.qr_code_scanner, size: 16),
+                          label: const Text('Pair via code'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: cloud.busy
+                              ? null
+                              : () => perform(context, () async {
+                                  await widget.store.markAllForSync();
+                                  await cloud.sync(forceAll: true);
+                                },
+                                    success:
+                                        'All records marked & re-synchronized!'),
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('Force full re-sync'),
+                        ),
+                        TextButton.icon(
+                          onPressed: () =>
+                              setState(() => showCloudSetup = !showCloudSetup),
+                          icon: const Icon(Icons.tune_rounded, size: 15),
+                          label: Text(
+                            showCloudSetup
+                                ? 'Hide server settings'
+                                : 'Server settings',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                         ),
                       ],
                     ),
                   ],
-                  if (cloud.signedIn)
-                    Wrap(
-                      spacing: 12,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(cloud.email ?? ''),
-                        FilledButton(
-                          onPressed: cloud.busy ? null : () => cloud.sync(),
-                          child: Text(cloud.busy ? 'Syncing…' : 'Sync now'),
-                        ),
-                        TextButton(
-                          onPressed: () => cloud.signOut(),
-                          child: const Text('Sign out'),
-                        ),
-                      ],
-                    ),
+
                   if (cloud.error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 12),
                       child: Text(
                         cloud.error!,
-                        style: const TextStyle(color: accent, fontSize: 11),
+                        style: const TextStyle(
+                          color: Color(0xFFC74343),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   if (widget.store.conflicts.isNotEmpty) ...[
@@ -640,6 +895,187 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPairingDialog(BuildContext context, CloudSync cloud) {
+    final s = widget.store.settings;
+    final shopName = cs['name']?.text.trim().isNotEmpty == true
+        ? cs['name']!.text.trim()
+        : (s['name'] ?? 'SRS AGENCIES').toString();
+    final code = CloudSync.createPairingCode(
+      url: cloud.url,
+      anonKey: cloud.anonKey,
+      shopName: shopName,
+    );
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.qr_code_2_rounded, color: green, size: 26),
+            SizedBox(width: 10),
+            Text('Link another device'),
+          ],
+        ),
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Scan this QR code from your phone or tablet, or copy the pairing code below to connect automatically in seconds.',
+                  style: TextStyle(fontSize: 12, color: muted, height: 1.5),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: lineColor),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0A000000),
+                        blurRadius: 12,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: QrImageView(
+                      data: code,
+                      version: QrVersions.auto,
+                      size: 200,
+                      gapless: false,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: canvas,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: lineColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          code,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            color: ink,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: code));
+                          toast(dialogCtx, 'Pairing code copied to clipboard');
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('Copy'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'On your other phone or laptop: Open Settings > Cloud & multi-device sync, tap "Pair via code", and paste this code.',
+                  style: TextStyle(fontSize: 11, color: muted, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showImportPairingDialog(BuildContext context, CloudSync cloud) {
+    final input = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setModal) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.qr_code_scanner, color: green, size: 24),
+              SizedBox(width: 10),
+              Text('Import Pairing Code'),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Paste the pairing code copied from your other device to connect automatically.',
+                  style: TextStyle(fontSize: 12, color: muted),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: input,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Pairing code',
+                    hintText: 'Paste code here…',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final parsed = CloudSync.parsePairingCode(input.text);
+                if (parsed == null) {
+                  toast(dialogCtx, 'Invalid pairing code format.', error: true);
+                  return;
+                }
+                Navigator.pop(dialogCtx);
+                setState(() {
+                  supabaseUrlController.text = parsed['url']!;
+                  supabaseKeyController.text = parsed['key']!;
+                  showCloudSetup = false;
+                });
+                await cloud.configure(
+                  url: parsed['url']!,
+                  anonKey: parsed['key']!,
+                );
+                await widget.store.saveSettings({
+                  'supabaseUrl': parsed['url']!,
+                  'supabaseAnonKey': parsed['key']!,
+                });
+                if (context.mounted) {
+                  toast(context, 'Direct sync connected successfully!');
+                }
+              },
+              child: const Text('Connect'),
+            ),
+          ],
+        ),
       ),
     );
   }

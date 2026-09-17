@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../data/app_store.dart';
+import '../services/image_optimizer.dart';
 import 'common.dart';
 
 class InventoryPage extends StatefulWidget {
@@ -496,6 +497,8 @@ Future<void> editProduct(
   );
   if (selectedDropdownCat.isEmpty) selectedDropdownCat = null;
   String? imageBase64 = p['image'] as String?;
+  String? imageOptimizationNote;
+  var optimizingImage = false;
   var saving = false;
   await showDialog(
     context: context,
@@ -527,7 +530,18 @@ Future<void> editProduct(
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: lineColor),
                         ),
-                        child: imageBase64 != null &&
+                        child: optimizingImage
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: green,
+                                  ),
+                                ),
+                              )
+                            : imageBase64 != null &&
                                 imageBase64!.trim().isNotEmpty
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(9),
@@ -583,20 +597,24 @@ Future<void> editProduct(
                                       vertical: 4,
                                     ),
                                   ),
-                                  onPressed: () async {
+                                  onPressed: optimizingImage
+                                      ? null
+                                      : () async {
                                     try {
                                       final picker = ImagePicker();
                                       final picked = await picker.pickImage(
                                         source: ImageSource.camera,
-                                        maxWidth: 1024,
-                                        maxHeight: 1024,
-                                        imageQuality: 85,
+                                        maxWidth: 1600,
+                                        maxHeight: 1600,
                                       );
                                       if (picked != null) {
-                                        final bytes =
-                                            await picked.readAsBytes();
+                                        final bytes = await picked.readAsBytes();
+                                        set(() => optimizingImage = true);
+                                        final opt = await ImageOptimizer.optimize(bytes);
                                         set(() {
-                                          imageBase64 = base64Encode(bytes);
+                                          imageBase64 = opt.base64;
+                                          imageOptimizationNote = opt.summary;
+                                          optimizingImage = false;
                                         });
                                       }
                                     } catch (_) {
@@ -610,10 +628,13 @@ Future<void> editProduct(
                                         ],
                                       );
                                       if (result != null) {
-                                        final bytes =
-                                            await result.readAsBytes();
+                                        final bytes = await result.readAsBytes();
+                                        set(() => optimizingImage = true);
+                                        final opt = await ImageOptimizer.optimize(bytes);
                                         set(() {
-                                          imageBase64 = base64Encode(bytes);
+                                          imageBase64 = opt.base64;
+                                          imageOptimizationNote = opt.summary;
+                                          optimizingImage = false;
                                         });
                                       }
                                     }
@@ -635,20 +656,24 @@ Future<void> editProduct(
                                       vertical: 4,
                                     ),
                                   ),
-                                  onPressed: () async {
+                                  onPressed: optimizingImage
+                                      ? null
+                                      : () async {
                                     try {
                                       final picker = ImagePicker();
                                       final picked = await picker.pickImage(
                                         source: ImageSource.gallery,
-                                        maxWidth: 1024,
-                                        maxHeight: 1024,
-                                        imageQuality: 85,
+                                        maxWidth: 1600,
+                                        maxHeight: 1600,
                                       );
                                       if (picked != null) {
-                                        final bytes =
-                                            await picked.readAsBytes();
+                                        final bytes = await picked.readAsBytes();
+                                        set(() => optimizingImage = true);
+                                        final opt = await ImageOptimizer.optimize(bytes);
                                         set(() {
-                                          imageBase64 = base64Encode(bytes);
+                                          imageBase64 = opt.base64;
+                                          imageOptimizationNote = opt.summary;
+                                          optimizingImage = false;
                                         });
                                       }
                                     } catch (_) {
@@ -662,10 +687,13 @@ Future<void> editProduct(
                                         ],
                                       );
                                       if (result != null) {
-                                        final bytes =
-                                            await result.readAsBytes();
+                                        final bytes = await result.readAsBytes();
+                                        set(() => optimizingImage = true);
+                                        final opt = await ImageOptimizer.optimize(bytes);
                                         set(() {
-                                          imageBase64 = base64Encode(bytes);
+                                          imageBase64 = opt.base64;
+                                          imageOptimizationNote = opt.summary;
+                                          optimizingImage = false;
                                         });
                                       }
                                     }
@@ -689,11 +717,37 @@ Future<void> editProduct(
                                       size: 16,
                                       color: Color(0xFFC74343),
                                     ),
-                                    onPressed: () =>
-                                        set(() => imageBase64 = null),
+                                    onPressed: () => set(() {
+                                      imageBase64 = null;
+                                      imageOptimizationNote = null;
+                                    }),
                                   ),
                               ],
                             ),
+                            if (optimizingImage)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 6),
+                                child: Text(
+                                  'Optimizing photo in background…',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: accent,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              )
+                            else if (imageOptimizationNote != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '✓ $imageOptimizationNote',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: green,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),

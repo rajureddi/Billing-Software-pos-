@@ -575,8 +575,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return AnimatedBuilder(
       animation: cloud,
       builder: (context, _) {
-        final isOnline =
-            cloud.configured && cloud.signedIn && cloud.error == null;
+        final isOnline = cloud.configured && cloud.error == null;
         final isSyncing = cloud.busy;
         final hasError = cloud.error != null;
         final pending = store.pendingCount;
@@ -594,17 +593,17 @@ class _DashboardPageState extends State<DashboardPage> {
             : hasError
                 ? 'Offline mode · Saved locally'
                 : isOnline
-                    ? 'Cloud synchronized'
+                    ? 'Direct multi-device sync active'
                     : 'SRS AGENCIES · Offline Ready';
 
         final String statusSubtitle = isSyncing
-            ? 'Uploading transactions securely.'
+            ? 'Synchronizing inventory, images, and invoices.'
             : hasError
                 ? 'Working offline. All bills and stock are safely recorded on this device.'
                 : isOnline
                     ? (cloud.lastSynced != null
                         ? 'Last synchronized ${DateFormat('hh:mm a, dd MMM').format(cloud.lastSynced!)} · Multi-device sync active'
-                        : 'Connected and ready to synchronize.')
+                        : 'Real-time multi-device sync ready.')
                     : 'Operating 100% offline. All bills and inventory are safely stored on this device.';
 
         final isCompact = MediaQuery.sizeOf(context).width < 650;

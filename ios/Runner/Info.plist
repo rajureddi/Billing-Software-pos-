@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Counterday uses your camera to capture product photos and scan device pairing QR codes.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Counterday uses your photo library to select product photos for your catalog.</string>
 </dict>
 </plist>

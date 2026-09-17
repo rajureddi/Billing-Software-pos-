@@ -114,5 +114,30 @@ void main(){
     expect((updated['lines'] as List).length, 2);
     expect(store.dueFor(invoice['id']), 500);
   });
+
+  test('updateInvoiceLines updates item discounts, overall discount, totals, and balances', () async {
+    final invoice = await sale(store, q: 2, paid: 100);
+
+    await store.updateInvoiceLines(
+      invoice['id'],
+      [
+        {
+          'productId': 'pipe',
+          'name': 'Pipe',
+          'unit': 'm',
+          'quantity': 4,
+          'price': 100,
+          'gst': 0,
+          'discount': {'type': 'amount', 'value': 50},
+        },
+      ],
+      discount: {'type': 'amount', 'value': 50},
+    );
+
+    final updated = store.invoices.firstWhere((i) => i['id'] == invoice['id']);
+    expect(updated['total'], 300);
+    expect((updated['discount'] as Map)['value'], 50);
+    expect(store.dueFor(invoice['id']), 200);
+  });
 }
 
