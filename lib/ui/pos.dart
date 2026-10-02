@@ -31,6 +31,7 @@ class _PosPageState extends State<PosPage> {
   @override
   void initState() {
     super.initState();
+    widget.store.addListener(_storeChanged);
     final draft = widget.store.draft;
     lines = (draft['lines'] as List? ?? []).map((e) => Json.from(e)).toList();
     customer = Json.from(draft['customer'] ?? {});
@@ -63,8 +64,13 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
+  void _storeChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void dispose() {
+    widget.store.removeListener(_storeChanged);
     saveTimer?.cancel();
     super.dispose();
   }
@@ -114,8 +120,8 @@ class _PosPageState extends State<PosPage> {
     final wide = MediaQuery.sizeOf(context).width >= 1000;
     return CallbackShortcuts(
       bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.keyN, control: true):
-            () => editLine(),
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
+            editLine(),
         const SingleActivator(LogicalKeyboardKey.f1): () => editLine(),
         const SingleActivator(LogicalKeyboardKey.enter, control: true): () {
           if (lines.isNotEmpty && !busy) {
@@ -199,7 +205,11 @@ class _PosPageState extends State<PosPage> {
         .where((p) => p['archived'] != true)
         .toList();
     final existingCats = widget.store.categories
-        .where((c) => all.any((p) => '${p['category']}'.toLowerCase() == c.toLowerCase()))
+        .where(
+          (c) => all.any(
+            (p) => '${p['category']}'.toLowerCase() == c.toLowerCase(),
+          ),
+        )
         .toList();
     final cats = ['All items', ...existingCats];
     final items = all
@@ -293,12 +303,12 @@ class _PosPageState extends State<PosPage> {
                 final catCount = c == 'All items'
                     ? all.length
                     : all
-                        .where(
-                          (p) =>
-                              '${p['category']}'.toLowerCase() ==
-                              c.toLowerCase(),
-                        )
-                        .length;
+                          .where(
+                            (p) =>
+                                '${p['category']}'.toLowerCase() ==
+                                c.toLowerCase(),
+                          )
+                          .length;
                 if (isCompact) {
                   return Material(
                     color: isSel ? ink : Colors.white,
@@ -330,8 +340,9 @@ class _PosPageState extends State<PosPage> {
                               c,
                               style: TextStyle(
                                 fontSize: 12,
-                                fontWeight:
-                                    isSel ? FontWeight.w700 : FontWeight.w500,
+                                fontWeight: isSel
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
                                 color: isSel ? Colors.white : ink,
                               ),
                             ),
@@ -452,8 +463,7 @@ class _PosPageState extends State<PosPage> {
                               onPressed: () => perform(
                                 context,
                                 () => widget.store.seedCatalog(),
-                                success:
-                                    'Sample catalog added. Review prices before selling.',
+                                success: 'Sample catalog added. Review prices before selling.',
                               ),
                               child: const Text('Try sample catalog'),
                             ),
@@ -540,7 +550,8 @@ class _PosPageState extends State<PosPage> {
                                               '${quantity(stock)} ${p['unit']} in stock',
                                               style: TextStyle(
                                                 fontSize: 10,
-                                                color: stock <=
+                                                color:
+                                                    stock <=
                                                         number(p['lowStock'])
                                                     ? accent
                                                     : muted,
@@ -579,14 +590,15 @@ class _PosPageState extends State<PosPage> {
                                                       color: canvas,
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              6),
+                                                            6,
+                                                          ),
                                                       border: Border.all(
-                                                          color: lineColor),
+                                                        color: lineColor,
+                                                      ),
                                                     ),
                                                     child: Icon(
                                                       Icons.add,
-                                                      size:
-                                                          isCompact ? 15 : 18,
+                                                      size: isCompact ? 15 : 18,
                                                       color: ink,
                                                     ),
                                                   ),
@@ -597,10 +609,12 @@ class _PosPageState extends State<PosPage> {
                                                     color: canvas,
                                                     borderRadius:
                                                         BorderRadius.circular(
-                                                            7),
+                                                          7,
+                                                        ),
                                                     border: Border.all(
                                                       color: accent.withValues(
-                                                          alpha: 0.5),
+                                                        alpha: 0.5,
+                                                      ),
                                                     ),
                                                   ),
                                                   child: Row(
@@ -611,23 +625,25 @@ class _PosPageState extends State<PosPage> {
                                                         onTap: () {
                                                           if (cartQty <= 1) {
                                                             lines.removeAt(
-                                                                lineIndex);
+                                                              lineIndex,
+                                                            );
                                                           } else {
-                                                            lines[lineIndex][
-                                                                    'quantity'] =
+                                                            lines[lineIndex]['quantity'] =
                                                                 cartQty - 1;
                                                           }
                                                           changed();
                                                         },
                                                         borderRadius:
-                                                            BorderRadius
-                                                                .circular(6),
+                                                            BorderRadius.circular(
+                                                              6,
+                                                            ),
                                                         child: Padding(
                                                           padding:
                                                               EdgeInsets.all(
-                                                                  isCompact
-                                                                      ? 3
-                                                                      : 4),
+                                                                isCompact
+                                                                    ? 3
+                                                                    : 4,
+                                                              ),
                                                           child: const Icon(
                                                             Icons.remove,
                                                             size: 13,
@@ -637,10 +653,9 @@ class _PosPageState extends State<PosPage> {
                                                       ),
                                                       Padding(
                                                         padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 3,
-                                                        ),
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 3,
+                                                            ),
                                                         child: Text(
                                                           quantity(cartQty),
                                                           style: TextStyle(
@@ -657,21 +672,22 @@ class _PosPageState extends State<PosPage> {
                                                         onTap: () =>
                                                             addProduct(p),
                                                         borderRadius:
-                                                            BorderRadius
-                                                                .circular(6),
+                                                            BorderRadius.circular(
+                                                              6,
+                                                            ),
                                                         child: Container(
                                                           padding:
                                                               EdgeInsets.all(
-                                                                  isCompact
-                                                                      ? 3
-                                                                      : 4),
-                                                          decoration:
-                                                              BoxDecoration(
+                                                                isCompact
+                                                                    ? 3
+                                                                    : 4,
+                                                              ),
+                                                          decoration: BoxDecoration(
                                                             color: accent,
                                                             borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        5),
+                                                                BorderRadius.circular(
+                                                                  5,
+                                                                ),
                                                           ),
                                                           child: const Icon(
                                                             Icons.add,
@@ -756,8 +772,7 @@ class _PosPageState extends State<PosPage> {
                     child: EmptyState(
                       icon: Icons.shopping_bag_outlined,
                       title: 'Ready for your first item',
-                      message:
-                          'Tap a product in the catalog to add it to this bill.',
+                      message: 'Tap a product in the catalog to add it to this bill.',
                     ),
                   )
                 : ListView(
@@ -856,10 +871,7 @@ class _PosPageState extends State<PosPage> {
         '${customer['name'] ?? ''}'.isEmpty
             ? 'Walk-in customer'
             : '${customer['name']}',
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
       ),
       subtitle: Text(
         '${customer['address'] ?? ''}'.isEmpty
@@ -878,8 +890,7 @@ class _PosPageState extends State<PosPage> {
     final q = number(l['quantity']);
     final p = number(l['price']);
     final lineGross = q * p;
-    final itemDisc =
-        (l['discount'] as Map?) ?? {'type': 'amount', 'value': 0};
+    final itemDisc = (l['discount'] as Map?) ?? {'type': 'amount', 'value': 0};
     final discVal = number(itemDisc['value']);
     final hasDisc = discVal > 0;
     double lineDiscountAmt = 0;
@@ -890,10 +901,12 @@ class _PosPageState extends State<PosPage> {
     }
     final lineNet = (lineGross - lineDiscountAmt).clamp(0.0, double.infinity);
 
-    final product = widget.store.products.cast<Map<String, dynamic>?>().firstWhere(
-      (prod) => prod?['id'] == l['productId'],
-      orElse: () => null,
-    );
+    final product = widget.store.products
+        .cast<Map<String, dynamic>?>()
+        .firstWhere(
+          (prod) => prod?['id'] == l['productId'],
+          orElse: () => null,
+        );
     final rawImage = (l['image'] ?? product?['image']) as String?;
 
     Widget itemThumbnail;
@@ -967,11 +980,7 @@ class _PosPageState extends State<PosPage> {
                       lines.removeAt(index);
                       changed();
                     },
-                    icon: const Icon(
-                      Icons.close,
-                      size: 16,
-                      color: muted,
-                    ),
+                    icon: const Icon(Icons.close, size: 16, color: muted),
                   ),
                 ],
               ),
@@ -1031,9 +1040,7 @@ class _PosPageState extends State<PosPage> {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: hasDisc
-                            ? green.withValues(alpha: 0.12)
-                            : canvas,
+                        color: hasDisc ? green.withValues(alpha: 0.12) : canvas,
                         border: Border.all(
                           color: hasDisc
                               ? green.withValues(alpha: 0.35)
@@ -1055,8 +1062,8 @@ class _PosPageState extends State<PosPage> {
                           Text(
                             hasDisc
                                 ? (itemDisc['type'] == 'percent'
-                                    ? '${itemDisc['value']}% off'
-                                    : '-${money(discVal)}')
+                                      ? '${itemDisc['value']}% off'
+                                      : '-${money(discVal)}')
                                 : '+ Disc',
                             style: TextStyle(
                               fontSize: 11,
@@ -1107,27 +1114,19 @@ class _PosPageState extends State<PosPage> {
                       const SizedBox(width: 4),
                       InkWell(
                         onTap: () {
-                          l['discount'] = {
-                            'type': 'amount',
-                            'value': 0,
-                          };
+                          l['discount'] = {'type': 'amount', 'value': 0};
                           changed();
                         },
                         child: const Padding(
                           padding: EdgeInsets.all(2),
-                          child: Icon(
-                            Icons.close,
-                            size: 13,
-                            color: muted,
-                          ),
+                          child: Icon(Icons.close, size: 13, color: muted),
                         ),
                       ),
                     ],
                   ),
                 ),
               if (l['productId'] != null &&
-                  number(l['quantity']) >
-                      widget.store.stockFor(l['productId']))
+                  number(l['quantity']) > widget.store.stockFor(l['productId']))
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
                   child: Text(
@@ -1148,11 +1147,7 @@ class _PosPageState extends State<PosPage> {
       color: Colors.white,
       border: Border(top: BorderSide(color: lineColor)),
       boxShadow: [
-        BoxShadow(
-          color: Colors.black12,
-          blurRadius: 6,
-          offset: Offset(0, -2),
-        ),
+        BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, -2)),
       ],
     ),
     child: SafeArea(
@@ -1188,9 +1183,7 @@ class _PosPageState extends State<PosPage> {
                   ? null
                   : checkout,
               icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: Text(
-                busy ? 'Saving bill…' : 'Continue to payment (F2)',
-              ),
+              label: Text(busy ? 'Saving bill…' : 'Continue to payment (F2)'),
             ),
           ),
         ],
@@ -1208,10 +1201,7 @@ class _PosPageState extends State<PosPage> {
       if (number(discount['value']) > 0)
         Container(
           margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 8,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: green.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(9),
@@ -1273,17 +1263,10 @@ class _PosPageState extends State<PosPage> {
               side: const BorderSide(color: lineColor),
             ),
             onPressed: lines.isEmpty ? null : editDiscount,
-            icon: const Icon(
-              Icons.percent_rounded,
-              size: 14,
-              color: accent,
-            ),
+            icon: const Icon(Icons.percent_rounded, size: 14, color: accent),
             label: const Text(
               '+ Add overall bill discount (₹ or %)',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -1292,20 +1275,14 @@ class _PosPageState extends State<PosPage> {
           const Expanded(
             child: Text(
               'Bill summary',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
             ),
           ),
           if (number(discount['value']) <= 0)
             TextButton.icon(
               onPressed: lines.isEmpty ? null : editDiscount,
               icon: const Icon(Icons.discount_outlined, size: 14),
-              label: const Text(
-                'Discount',
-                style: TextStyle(fontSize: 11),
-              ),
+              label: const Text('Discount', style: TextStyle(fontSize: 11)),
             ),
         ],
       ),
@@ -1360,9 +1337,7 @@ class _PosPageState extends State<PosPage> {
           children: [
             Expanded(
               child: Text(
-                taxInclusive
-                    ? 'Prices include tax'
-                    : 'Tax added to prices',
+                taxInclusive ? 'Prices include tax' : 'Tax added to prices',
                 style: const TextStyle(fontSize: 10, color: muted),
               ),
             ),
@@ -1371,18 +1346,12 @@ class _PosPageState extends State<PosPage> {
                 taxInclusive = !taxInclusive;
                 changed();
               },
-              child: const Text(
-                'Change',
-                style: TextStyle(fontSize: 10),
-              ),
+              child: const Text('Change', style: TextStyle(fontSize: 10)),
             ),
           ],
         ),
       if (problem != null)
-        Text(
-          problem,
-          style: const TextStyle(color: Colors.red, fontSize: 11),
-        ),
+        Text(problem, style: const TextStyle(color: Colors.red, fontSize: 11)),
       if (!isMobile) ...[
         const Divider(color: lineColor),
         const SizedBox(height: 6),
@@ -1411,9 +1380,7 @@ class _PosPageState extends State<PosPage> {
                 ? null
                 : checkout,
             icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-            label: Text(
-              busy ? 'Saving bill…' : 'Continue to payment (F2)',
-            ),
+            label: Text(busy ? 'Saving bill…' : 'Continue to payment (F2)'),
           ),
         ),
         const SizedBox(height: 6),
@@ -1494,7 +1461,8 @@ class _PosPageState extends State<PosPage> {
       builder: (dialog) => StatefulBuilder(
         builder: (dialog, set) => AlertDialog(
           title: Text(
-              index == null ? 'Add custom / loose item' : 'Edit bill item'),
+            index == null ? 'Add custom / loose item' : 'Edit bill item',
+          ),
           content: SizedBox(
             width: 460,
             child: SingleChildScrollView(
@@ -1533,13 +1501,10 @@ class _PosPageState extends State<PosPage> {
                   Row(
                     children: [
                       Expanded(
-                        child:
-                            field('GST rate (%)', cs['gst']!, numeric: true),
+                        child: field('GST rate (%)', cs['gst']!, numeric: true),
                       ),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: field('HSN code (optional)', cs['hsn']!),
-                      ),
+                      Expanded(child: field('HSN code (optional)', cs['hsn']!)),
                     ],
                   ),
                   Row(
@@ -1612,16 +1577,22 @@ class _PosPageState extends State<PosPage> {
                                     ),
                                     child: DropdownButtonHideUnderline(
                                       child: DropdownButton<String>(
-                                        value: widget.store.categories.any(
-                                          (c) =>
-                                              c.toLowerCase() ==
-                                              catController.text.trim().toLowerCase(),
-                                        )
-                                            ? widget.store.categories.firstWhere(
-                                                (c) =>
-                                                    c.toLowerCase() ==
-                                                    catController.text.trim().toLowerCase(),
-                                              )
+                                        value:
+                                            widget.store.categories.any(
+                                              (c) =>
+                                                  c.toLowerCase() ==
+                                                  catController.text
+                                                      .trim()
+                                                      .toLowerCase(),
+                                            )
+                                            ? widget.store.categories
+                                                  .firstWhere(
+                                                    (c) =>
+                                                        c.toLowerCase() ==
+                                                        catController.text
+                                                            .trim()
+                                                            .toLowerCase(),
+                                                  )
                                             : null,
                                         isExpanded: true,
                                         hint: const Text(
@@ -1629,12 +1600,15 @@ class _PosPageState extends State<PosPage> {
                                           style: TextStyle(fontSize: 12),
                                         ),
                                         items: [
-                                          for (final c in widget.store.categories)
+                                          for (final c
+                                              in widget.store.categories)
                                             DropdownMenuItem(
                                               value: c,
                                               child: Text(
                                                 c,
-                                                style: const TextStyle(fontSize: 12),
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                ),
                                               ),
                                             ),
                                         ],
@@ -1766,7 +1740,10 @@ class _PosPageState extends State<PosPage> {
                     children: [
                       const Text(
                         'Item discount',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       Text(
                         '${item['name']}',
@@ -1844,19 +1821,23 @@ class _PosPageState extends State<PosPage> {
                       children: [
                         const Text(
                           'Presets:',
-                          style: TextStyle(fontSize: 11, color: muted, height: 2),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: muted,
+                            height: 2,
+                          ),
                         ),
-                        for (final p in type == 'percent'
-                            ? [2, 5, 10, 15, 20, 25]
-                            : [10, 20, 50, 100, 200, 500])
+                        for (final p
+                            in type == 'percent'
+                                ? [2, 5, 10, 15, 20, 25]
+                                : [10, 20, 50, 100, 200, 500])
                           ActionChip(
                             visualDensity: VisualDensity.compact,
                             label: Text(
                               type == 'percent' ? '$p%' : '₹$p',
                               style: const TextStyle(fontSize: 11),
                             ),
-                            onPressed: () =>
-                                set(() => controller.text = '$p'),
+                            onPressed: () => set(() => controller.text = '$p'),
                           ),
                       ],
                     ),
@@ -1883,9 +1864,7 @@ class _PosPageState extends State<PosPage> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: val > 0
-                            ? green.withValues(alpha: 0.1)
-                            : canvas,
+                        color: val > 0 ? green.withValues(alpha: 0.1) : canvas,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: val > 0
@@ -2063,19 +2042,23 @@ class _PosPageState extends State<PosPage> {
                       children: [
                         const Text(
                           'Presets:',
-                          style: TextStyle(fontSize: 11, color: muted, height: 2),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: muted,
+                            height: 2,
+                          ),
                         ),
-                        for (final p in type == 'percent'
-                            ? [2, 5, 10, 15, 20]
-                            : [20, 50, 100, 200, 500])
+                        for (final p
+                            in type == 'percent'
+                                ? [2, 5, 10, 15, 20]
+                                : [20, 50, 100, 200, 500])
                           ActionChip(
                             visualDensity: VisualDensity.compact,
                             label: Text(
                               type == 'percent' ? '$p%' : '₹$p',
                               style: const TextStyle(fontSize: 11),
                             ),
-                            onPressed: () =>
-                                set(() => controller.text = '$p'),
+                            onPressed: () => set(() => controller.text = '$p'),
                           ),
                       ],
                     ),
@@ -2102,9 +2085,7 @@ class _PosPageState extends State<PosPage> {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: val > 0
-                            ? green.withValues(alpha: 0.1)
-                            : canvas,
+                        color: val > 0 ? green.withValues(alpha: 0.1) : canvas,
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: val > 0
@@ -2521,10 +2502,7 @@ class _PosPageState extends State<PosPage> {
               top: 6,
               left: 6,
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 7,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: BoxDecoration(
                   color: accent,
                   borderRadius: BorderRadius.circular(6),
@@ -2539,11 +2517,7 @@ class _PosPageState extends State<PosPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.check,
-                      color: Colors.white,
-                      size: 11,
-                    ),
+                    const Icon(Icons.check, color: Colors.white, size: 11),
                     const SizedBox(width: 3),
                     Text(
                       '${quantity(cartQty)} in cart',
@@ -2562,11 +2536,7 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
-  Widget _defaultHeaderIcon(
-    Map<String, dynamic> p,
-    int index,
-    bool isCompact,
-  ) {
+  Widget _defaultHeaderIcon(Map<String, dynamic> p, int index, bool isCompact) {
     return Container(
       color: [
         const Color(0xFFF0EDE5),
@@ -2607,4 +2577,3 @@ class _PosPageState extends State<PosPage> {
     );
   }
 }
-

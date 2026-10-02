@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-echo "=== Vercel Build: SRS AGENCIES Flutter Web ==="
+echo "=== Vercel Build: Counterday Flutter Web ==="
 
 # Install Flutter if not cached
 if [ ! -d "$HOME/flutter" ]; then
@@ -14,9 +14,13 @@ export PATH="$PATH:$HOME/flutter/bin"
 echo "Flutter version:"
 flutter --version
 
-echo "Building Flutter Web Release..."
+echo "Building Flutter Web Release with environment variables..."
 flutter config --enable-web
 flutter pub get
-flutter build web --release
+
+# Inject Vercel Project Environment Variables at compile-time
+flutter build web --release \
+  --dart-define=SUPABASE_URL="${SUPABASE_URL}" \
+  --dart-define=SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}"
 
 echo "=== Flutter Web Build Complete! Output at build/web ==="

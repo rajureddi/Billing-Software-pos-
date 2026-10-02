@@ -3,14 +3,13 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/app_store.dart';
 import '../services/cloud_sync.dart';
 import '../services/image_optimizer.dart';
 import 'common.dart';
-
-
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.store});
@@ -21,6 +20,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late Map<String, TextEditingController> cs;
+  final shopTokenController = TextEditingController();
   late bool gst, taxInclusive;
   late String paper;
   String logo = '';
@@ -39,6 +39,7 @@ class _SettingsPageState extends State<SettingsPage> {
     cs = {
       for (final k in [
         'name',
+        'owner',
         'tagline',
         'category',
         'address',
@@ -65,11 +66,32 @@ class _SettingsPageState extends State<SettingsPage> {
     supabaseKeyController = TextEditingController(
       text: initialKey.isNotEmpty ? initialKey : cloud.anonKey,
     );
+    shopTokenController.text = cloud.shopToken;
     showCloudSetup = !cloud.configured;
+    widget.store.syncChanges.addListener(_onStoreChanged);
+  }
+
+  void _onStoreChanged() {
+    if (!mounted || saving) return;
+    final s = widget.store.settings;
+    for (final entry in cs.entries) {
+      final val = '${s[entry.key] ?? ''}';
+      if (entry.value.text != val) {
+        entry.value.text = val;
+      }
+    }
+    setState(() {
+      gst = s['gstEnabled'] == true;
+      taxInclusive = s['taxInclusive'] == true;
+      paper = s['paper'] ?? 'A4';
+      logo = s['logoBase64'] ?? '';
+    });
   }
 
   @override
   void dispose() {
+    widget.store.syncChanges.removeListener(_onStoreChanged);
+    shopTokenController.dispose();
     for (final c in cs.values) {
       c.dispose();
     }
@@ -101,10 +123,17 @@ class _SettingsPageState extends State<SettingsPage> {
         'logoBase64': logo,
         'supabaseUrl': url,
         'supabaseAnonKey': key,
+        'supabaseShopToken': shopTokenController.text.trim(),
       });
       final cloud = cloudFor(widget.store);
-      if (url != cloud.url || key != cloud.anonKey) {
-        await cloud.configure(url: url, anonKey: key);
+      if (url != cloud.url ||
+          key != cloud.anonKey ||
+          shopTokenController.text.trim() != cloud.shopToken) {
+        await cloud.configure(
+          url: url,
+          anonKey: key,
+          shopToken: shopTokenController.text,
+        );
       }
     }, success: 'Shop settings saved');
     if (mounted) setState(() => saving = false);
@@ -198,6 +227,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 24),
                     field('Shop name', cs['name']!),
+                    field('Owner / Proprietor name', cs['owner']!),
                     field('Tagline', cs['tagline']!),
                     field(
                       'Business category',
@@ -356,26 +386,22 @@ class _SettingsPageState extends State<SettingsPage> {
                         cloud.busy
                             ? 'Syncing…'
                             : !cloud.configured
-                                ? 'Local mode'
-                                : cloud.error != null
-                                    ? 'Offline · Retrying'
-                                    : 'Direct sync active',
+                            ? 'Local mode'
+                            : cloud.error != null
+                            ? 'Offline · Retrying'
+                            : 'Direct sync active',
                         color: !cloud.configured
                             ? muted
                             : cloud.error != null
-                                ? accent
-                                : green,
+                            ? accent
+                            : green,
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
                   const Text(
                     'All your inventory, product photos, stock movements, and invoices sync in real-time across iOS, Android, Windows, and Web. If internet disconnects, local billing and printing continue smoothly.',
-                    style: TextStyle(
-                      color: muted,
-                      fontSize: 12,
-                      height: 1.7,
-                    ),
+                    style: TextStyle(color: muted, fontSize: 12, height: 1.7),
                   ),
                   const SizedBox(height: 16),
 
@@ -393,7 +419,11 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.hub_outlined, color: green, size: 20),
+                              const Icon(
+                                Icons.hub_outlined,
+                                color: green,
+                                size: 20,
+                              ),
                               const SizedBox(width: 8),
                               const Expanded(
                                 child: Text(
@@ -418,8 +448,15 @@ class _SettingsPageState extends State<SettingsPage> {
                             style: TextStyle(fontSize: 11, color: muted),
                           ),
                           const SizedBox(height: 14),
-                          field('Supabase Project URL', supabaseUrlController),
-                          field('Publishable / Anon API Key', supabaseKeyController),
+                          const Text(
+                            'Supabase URL and Anon Key are securely loaded from your .env file.',
+                            style: TextStyle(fontSize: 12, color: green, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 14),
+                          field(
+                            'Private Shop Token (Optional)',
+                            shopTokenController,
+                          ),
                           if (connectionFeedback != null) ...[
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12),
@@ -458,27 +495,36 @@ class _SettingsPageState extends State<SettingsPage> {
                               FilledButton.icon(
                                 onPressed: cloud.busy
                                     ? null
-                                    : () => perform(context, () async {
-                                        final url =
-                                            supabaseUrlController.text.trim();
-                                        final key =
-                                            supabaseKeyController.text.trim();
-                                        if (url.isEmpty || key.isEmpty) {
-                                          throw ArgumentError(
-                                            'Enter both Supabase URL and Publishable Key.',
+                                    : () => perform(
+                                        context,
+                                        () async {
+                                          final url = supabaseUrlController.text
+                                              .trim();
+                                          final key = supabaseKeyController.text
+                                              .trim();
+                                          if (url.isEmpty || key.isEmpty) {
+                                            throw ArgumentError(
+                                              'Enter the project URL and publishable key.',
+                                            );
+                                          }
+                                          await cloud.configure(
+                                            url: url,
+                                            anonKey: key,
+                                            shopToken: shopTokenController.text,
                                           );
-                                        }
-                                        await cloud.configure(
-                                          url: url,
-                                          anonKey: key,
-                                        );
-                                        await widget.store.saveSettings({
-                                          'supabaseUrl': url,
-                                          'supabaseAnonKey': key,
-                                        });
-                                        setState(() => showCloudSetup = false);
-                                      },
-                                      success: 'Connected to Supabase project!'),
+                                          await widget.store.saveSettings({
+                                            'supabaseUrl': url,
+                                            'supabaseAnonKey': key,
+                                            'supabaseShopToken':
+                                                shopTokenController.text.trim(),
+                                          });
+                                          setState(
+                                            () => showCloudSetup = false,
+                                          );
+                                        },
+                                        success:
+                                            'Connected to Supabase project!',
+                                      ),
                                 icon: const Icon(Icons.link, size: 16),
                                 label: const Text('Save & Connect'),
                               ),
@@ -492,9 +538,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                         });
                                         final ok =
                                             await CloudSync.testConnection(
-                                          supabaseUrlController.text,
-                                          supabaseKeyController.text,
-                                        );
+                                              supabaseUrlController.text,
+                                              supabaseKeyController.text,
+                                              shopToken:
+                                                  shopTokenController.text,
+                                            );
                                         if (mounted) {
                                           setState(() {
                                             testingConnection = false;
@@ -513,16 +561,23 @@ class _SettingsPageState extends State<SettingsPage> {
                                           strokeWidth: 2,
                                         ),
                                       )
-                                    : const Icon(Icons.network_check_rounded,
-                                        size: 16),
-                                label: Text(testingConnection
-                                    ? 'Testing…'
-                                    : 'Test Connection'),
+                                    : const Icon(
+                                        Icons.network_check_rounded,
+                                        size: 16,
+                                      ),
+                                label: Text(
+                                  testingConnection
+                                      ? 'Testing…'
+                                      : 'Test Connection',
+                                ),
                               ),
                               OutlinedButton.icon(
                                 onPressed: () =>
                                     _showImportPairingDialog(context, cloud),
-                                icon: const Icon(Icons.qr_code_scanner, size: 16),
+                                icon: const Icon(
+                                  Icons.qr_code_scanner,
+                                  size: 16,
+                                ),
                                 label: const Text('Import Pairing Code'),
                               ),
                             ],
@@ -612,40 +667,6 @@ class _SettingsPageState extends State<SettingsPage> {
                                 }, success: 'Synchronized with cloud!'),
                           icon: const Icon(Icons.sync_rounded, size: 16),
                           label: Text(cloud.busy ? 'Syncing…' : 'Sync now'),
-                        ),
-                        FilledButton.tonalIcon(
-                          onPressed: () => _showPairingDialog(context, cloud),
-                          icon: const Icon(Icons.qr_code_2_rounded, size: 17),
-                          label: const Text('Link Another Device'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: () =>
-                              _showImportPairingDialog(context, cloud),
-                          icon: const Icon(Icons.qr_code_scanner, size: 16),
-                          label: const Text('Pair via code'),
-                        ),
-                        OutlinedButton.icon(
-                          onPressed: cloud.busy
-                              ? null
-                              : () => perform(context, () async {
-                                  await widget.store.markAllForSync();
-                                  await cloud.sync(forceAll: true);
-                                },
-                                    success:
-                                        'All records marked & re-synchronized!'),
-                          icon: const Icon(Icons.refresh_rounded, size: 16),
-                          label: const Text('Force full re-sync'),
-                        ),
-                        TextButton.icon(
-                          onPressed: () =>
-                              setState(() => showCloudSetup = !showCloudSetup),
-                          icon: const Icon(Icons.tune_rounded, size: 15),
-                          label: Text(
-                            showCloudSetup
-                                ? 'Hide server settings'
-                                : 'Server settings',
-                            style: const TextStyle(fontSize: 12),
-                          ),
                         ),
                       ],
                     ),
@@ -769,6 +790,28 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                try {
+                  await Supabase.instance.client.auth.signOut();
+                } catch (_) {}
+                await widget.store.switchShop('');
+                if (context.mounted) {
+                  context.go('/login');
+                }
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFC42B2B),
+                side: const BorderSide(color: Color(0xFFC42B2B)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              icon: const Icon(Icons.logout_rounded),
+              label: const Text('Log Out of Workspace'),
+            ),
+          ),
+          const SizedBox(height: 60),
         ],
       ),
     );
@@ -899,114 +942,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _showPairingDialog(BuildContext context, CloudSync cloud) {
-    final s = widget.store.settings;
-    final shopName = cs['name']?.text.trim().isNotEmpty == true
-        ? cs['name']!.text.trim()
-        : (s['name'] ?? 'SRS AGENCIES').toString();
-    final code = CloudSync.createPairingCode(
-      url: cloud.url,
-      anonKey: cloud.anonKey,
-      shopName: shopName,
-    );
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.qr_code_2_rounded, color: green, size: 26),
-            SizedBox(width: 10),
-            Text('Link another device'),
-          ],
-        ),
-        content: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Scan this QR code from your phone or tablet, or copy the pairing code below to connect automatically in seconds.',
-                  style: TextStyle(fontSize: 12, color: muted, height: 1.5),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: lineColor),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x0A000000),
-                        blurRadius: 12,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: QrImageView(
-                      data: code,
-                      version: QrVersions.auto,
-                      size: 200,
-                      gapless: false,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: canvas,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: lineColor),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          code,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                            color: ink,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      FilledButton.tonalIcon(
-                        onPressed: () {
-                          Clipboard.setData(ClipboardData(text: code));
-                          toast(dialogCtx, 'Pairing code copied to clipboard');
-                        },
-                        icon: const Icon(Icons.copy_rounded, size: 16),
-                        label: const Text('Copy'),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'On your other phone or laptop: Open Settings > Cloud & multi-device sync, tap "Pair via code", and paste this code.',
-                  style: TextStyle(fontSize: 11, color: muted, height: 1.5),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Done'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showImportPairingDialog(BuildContext context, CloudSync cloud) {
     final input = TextEditingController();
     showDialog(
@@ -1058,15 +993,18 @@ class _SettingsPageState extends State<SettingsPage> {
                 setState(() {
                   supabaseUrlController.text = parsed['url']!;
                   supabaseKeyController.text = parsed['key']!;
+                  shopTokenController.text = parsed['token'] ?? '';
                   showCloudSetup = false;
                 });
                 await cloud.configure(
                   url: parsed['url']!,
                   anonKey: parsed['key']!,
+                  shopToken: parsed['token'] ?? '',
                 );
                 await widget.store.saveSettings({
                   'supabaseUrl': parsed['url']!,
                   'supabaseAnonKey': parsed['key']!,
+                  'supabaseShopToken': parsed['token'] ?? '',
                 });
                 if (context.mounted) {
                   toast(context, 'Direct sync connected successfully!');

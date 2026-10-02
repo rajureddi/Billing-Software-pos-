@@ -2,12 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/app_store.dart';
+import 'data/app_config.dart';
 import 'ui/app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  String? userId;
   try {
-    final store = await AppStore.open();
+    if (AppConfig.supabaseUrl.isNotEmpty && AppConfig.supabaseAnonKey.isNotEmpty) {
+      final client = await AppConfig.getClient();
+      userId = client.auth.currentUser?.id;
+    }
+  } catch (_) {}
+  try {
+    final store = await AppStore.open(shopId: userId);
     runApp(
       ProviderScope(
         overrides: [storeProvider.overrideWithValue(store)],

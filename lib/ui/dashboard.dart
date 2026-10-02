@@ -580,7 +580,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return AnimatedBuilder(
       animation: cloud,
       builder: (context, _) {
-        final isOnline = cloud.configured && cloud.error == null;
+        final isOnline = cloud.isOnline;
         final isSyncing = cloud.busy;
         final hasError = cloud.error != null;
         final pending = store.pendingCount;

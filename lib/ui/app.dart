@@ -13,6 +13,8 @@ import 'settings.dart';
 import 'branding.dart';
 import 'splash_screen.dart';
 import 'landing_page.dart';
+import 'login_page.dart';
+import 'onboarding_page.dart';
 
 final storeProvider = Provider<AppStore>(
   (ref) => throw StateError('Store not initialized'),
@@ -33,6 +35,20 @@ final appRouter = GoRouter(
       builder: (context, state) => Consumer(
         builder: (context, ref, _) =>
             LandingPage(store: ref.watch(storeProvider)),
+      ),
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => Consumer(
+        builder: (context, ref, _) =>
+            LoginPage(store: ref.watch(storeProvider)),
+      ),
+    ),
+    GoRoute(
+      path: '/onboard',
+      builder: (context, state) => Consumer(
+        builder: (context, ref, _) =>
+            OnboardingPage(store: ref.watch(storeProvider)),
       ),
     ),
     StatefulShellRoute.indexedStack(

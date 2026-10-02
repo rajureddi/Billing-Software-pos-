@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
@@ -6,11 +7,12 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../domain/billing.dart';
+import 'app_config.dart';
 
 class _Database extends GeneratedDatabase {
   _Database(super.executor);
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
   @override
   Iterable<TableInfo<Table, Object?>> get allTables => const [];
   @override
@@ -19,10 +21,12 @@ class _Database extends GeneratedDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await customStatement(
-        'CREATE TABLE records (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload TEXT NOT NULL, revision INTEGER NOT NULL, dirty INTEGER NOT NULL DEFAULT 1, base_revision INTEGER NOT NULL DEFAULT 0)',
+        'CREATE TABLE records (id TEXT PRIMARY KEY, kind TEXT NOT NULL, payload TEXT NOT NULL, revision INTEGER NOT NULL, dirty INTEGER NOT NULL DEFAULT 1, base_revision INTEGER NOT NULL DEFAULT 0, group_id TEXT)',
       );
     },
     onUpgrade: (m, from, to) async {
+      if (from < 3)
+        await customStatement('ALTER TABLE records ADD COLUMN group_id TEXT');
       if (from < 2) {
         await customStatement(
           'ALTER TABLE records ADD COLUMN base_revision INTEGER NOT NULL DEFAULT 0',
@@ -34,9 +38,40 @@ class _Database extends GeneratedDatabase {
 
 class AppStore extends ChangeNotifier {
   AppStore._(this._db);
-  final _Database _db;
+  _Database _db;
   static const _uuid = Uuid();
   List<Map<String, dynamic>> _records = [];
+  final Map<String, Map<String, dynamic>> _byId = {};
+  final Map<String, List<Map<String, dynamic>>> _byKind = {};
+  Map<String, Map<String, dynamic>>? _invoiceIndex;
+  Future<void> _writeQueue = Future.value();
+  String? _groupId;
+  final ChangeNotifier syncChanges = ChangeNotifier();
+  final ChangeNotifier syncStatus = ChangeNotifier();
+  static dynamic _copy(dynamic value) {
+    if (value is Map)
+      return value.map((k, v) => MapEntry(k.toString(), _copy(v)));
+    if (value is List) return value.map(_copy).toList();
+    return value;
+  }
+
+  List<Map<String, dynamic>> _raw(String kind) => _byKind[kind] ?? const [];
+  void _index() {
+    _byId.clear();
+    _byKind.clear();
+    _invoiceIndex = null;
+    for (final r in _records) {
+      _byId[r['id']] = r;
+      _byKind.putIfAbsent(r['kind'], () => []).add(r['payload']);
+    }
+  }
+
+  Future<void> _exclusive(Future<void> Function() action) {
+    final operation = _writeQueue.then((_) => action());
+    _writeQueue = operation.catchError((Object _) {});
+    return operation;
+  }
+
   Map<String, double>? _cachedStockMap;
   Map<String, double>? _cachedPaidMap;
   List<Map<String, dynamic>>? _cachedCustomerBalances;
@@ -49,32 +84,31 @@ class AppStore extends ChangeNotifier {
               )['value'] ??
               '')
           as String;
-  List<Map<String, dynamic>> _kind(String kind) => _records
-      .where((r) => r['kind'] == kind)
-      .map(
-        (r) => Map<String, dynamic>.from(
-          jsonDecode(jsonEncode(r['payload'])) as Map,
-        ),
-      )
-      .toList();
+  List<Map<String, dynamic>> _kind(String kind) =>
+      _raw(kind).map((p) => Map<String, dynamic>.from(_copy(p))).toList();
   List<Map<String, dynamic>> get products => _kind('product');
-  List<Map<String, dynamic>> get invoices => _kind('invoice')
-      .where((inv) => inv['deleted'] != true)
-      .map((invoice) {
-        final cancellation = _kind('cancellation')
-            .where(
-              (c) => c['invoiceId'] == invoice['id'] && c['deleted'] != true,
-            )
-            .firstOrNull;
-        return {
-          ...invoice,
-          if (cancellation != null) ...{
-            'cancelled': true,
-            'cancellationReason': cancellation['reason'],
-            'cancelledAt': cancellation['createdAt'],
+  Map<String, Map<String, dynamic>> get _invoicesById {
+    if (_invoiceIndex != null) return _invoiceIndex!;
+    final cancellations = {
+      for (final c in _raw('cancellation'))
+        if (c['deleted'] != true) c['invoiceId']: c,
+    };
+    return _invoiceIndex = {
+      for (final invoice in _raw('invoice'))
+        if (invoice['deleted'] != true)
+          invoice['id']: {
+            ...invoice,
+            if (cancellations[invoice['id']] case final c?) ...{
+              'cancelled': true,
+              'cancellationReason': c['reason'],
+              'cancelledAt': c['createdAt'],
+            },
           },
-        };
-      })
+    };
+  }
+
+  List<Map<String, dynamic>> get invoices => _invoicesById.values
+      .map((p) => Map<String, dynamic>.from(_copy(p)))
       .toList();
   List<Map<String, dynamic>> get payments =>
       _kind('payment').where((p) => p['deleted'] != true).toList();
@@ -86,37 +120,49 @@ class AppStore extends ChangeNotifier {
   Map<String, dynamic> get settings => {
     ...defaultSettings,
     ...(_kind('settings').firstOrNull ?? {}),
+    ...(_raw('local').where((r) => r['id'] == 'cloud-config').firstOrNull ??
+        {}),
   };
   Map<String, dynamic> get draft => _kind('draft').firstOrNull ?? {};
-  int get pendingCount => exportSyncRecords().length;
-  static const defaultSettings = {
-    'name': 'SRS AGENCIES',
-    'tagline': 'Hardware & Building Materials',
-    'category': 'Hardware, Cement & Steel',
+  int get pendingCount => _records
+      .where(
+        (r) =>
+            r['dirty'] == 1 &&
+            !['local', 'draft', 'conflict'].contains(r['kind']),
+      )
+      .length;
+  static Map<String, dynamic> get defaultSettings => {
+    'name': 'My Store',
+    'owner': '',
+    'tagline': 'Retail & Billing',
+    'category': 'General Retail',
     'address': '',
     'phone': '',
     'email': '',
     'gstin': '',
     'state': '',
-    'footer':
-        '1. Goods once sold are covered by standard store policy. 2. Subject to local jurisdiction.',
+    'footer': '1. Goods once sold are covered by standard store policy. 2. Subject to local jurisdiction.',
     'upi': '',
     'bank': '',
     'gstEnabled': false,
     'taxInclusive': false,
     'paper': 'A4',
-    'supabaseUrl': '',
-    'supabaseAnonKey': '',
+    'supabaseUrl': AppConfig.supabaseUrl,
+    'supabaseAnonKey': AppConfig.supabaseAnonKey,
   };
-  static Future<AppStore> open() async => openForTesting(
-    driftDatabase(
-      name: 'counterday',
-      web: DriftWebOptions(
-        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-        driftWorker: Uri.parse('drift_worker.js'),
+  static Future<AppStore> open({String? shopId}) async {
+    final cleanId = shopId?.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_') ?? '';
+    final dbName = cleanId.isNotEmpty ? 'counterday_$cleanId' : 'counterday_guest';
+    return openForTesting(
+      driftDatabase(
+        name: dbName,
+        web: DriftWebOptions(
+          sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+          driftWorker: Uri.parse('drift_worker.js'),
+        ),
       ),
-    ),
-  );
+    );
+  }
   static Future<AppStore> openForTesting(QueryExecutor executor) async {
     final store = AppStore._(_Database(executor));
     await store._reload();
@@ -131,7 +177,53 @@ class AppStore extends ChangeNotifier {
     return store;
   }
 
-  Future<void> close() => _db.close();
+  Future<void> close() async {
+    await _writeQueue;
+    syncChanges.dispose();
+    syncStatus.dispose();
+    await _db.close();
+  }
+
+  /// Clears all local records from SQLite so a new shop starts with zero old data
+  Future<void> clearAllData() async {
+    await _writeQueue;
+    await _db.customStatement('DELETE FROM records');
+    _records = [];
+    _index();
+    await _reload();
+    syncChanges.notifyListeners();
+    notifyListeners();
+  }
+
+  /// Switches the local offline SQLite database to be completely scoped to the logged-in shop/user
+  Future<void> switchShop(String shopId) async {
+    await _writeQueue;
+    await _db.close();
+    final cleanId = shopId.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    final dbName = cleanId.isNotEmpty ? 'counterday_$cleanId' : 'counterday_guest';
+    final newExecutor = driftDatabase(
+      name: dbName,
+      web: DriftWebOptions(
+        sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+        driftWorker: Uri.parse('drift_worker.js'),
+      ),
+    );
+    _db = _Database(newExecutor);
+    _records = [];
+    _index();
+    await _reload();
+    if (deviceId.isEmpty) {
+      await _commit(
+        () => _put('local', {
+          'id': 'device',
+          'value': _uuid.v4(),
+        }, dirty: false),
+      );
+    }
+    syncChanges.notifyListeners();
+    notifyListeners();
+  }
+
   Future<void> _reload() async {
     _cachedStockMap = null;
     _cachedPaidMap = null;
@@ -148,9 +240,11 @@ class AppStore extends ChangeNotifier {
             'revision': r.read<int>('revision'),
             'dirty': r.read<int>('dirty'),
             'baseRevision': r.read<int>('base_revision'),
+            'groupId': r.readNullable<String>('group_id'),
           },
         )
         .toList();
+    _index();
   }
 
   Future<void> _put(
@@ -168,16 +262,81 @@ class AppStore extends ChangeNotifier {
         .getSingleOrNull();
     final next = revision ?? ((existing?.read<int>('revision') ?? 0) + 1);
     await _db.customStatement(
-      'INSERT INTO records (id,kind,payload,revision,dirty) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,payload=excluded.payload,revision=excluded.revision,dirty=excluded.dirty',
-      [id, kind, jsonEncode(payload), next, dirty ? 1 : 0],
+      'INSERT INTO records (id,kind,payload,revision,dirty,group_id) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,payload=excluded.payload,revision=excluded.revision,dirty=excluded.dirty,group_id=excluded.group_id',
+      [
+        id,
+        kind,
+        jsonEncode(payload),
+        next,
+        dirty ? 1 : 0,
+        dirty ? _groupId : null,
+      ],
     );
   }
 
-  Future<void> _commit(Future<void> Function() action) async {
-    await _db.transaction(action);
-    await _reload();
-    notifyListeners();
-  }
+  Future<void> _commit(
+    Future<void> Function() action, {
+    bool notify = true,
+    bool localEdit = true,
+  }) => _exclusive(() async {
+    final changed = <String>{};
+
+    // A temporary change journal also covers explicit updates and tombstones.
+    await _db.customStatement(
+      'CREATE TEMP TABLE IF NOT EXISTS changed_records (id TEXT PRIMARY KEY)',
+    );
+    for (final event in ['INSERT', 'UPDATE', 'DELETE']) {
+      final row = event == 'DELETE' ? 'OLD' : 'NEW';
+      await _db.customStatement(
+        'CREATE TEMP TRIGGER IF NOT EXISTS audit_${event.toLowerCase()} AFTER $event ON records BEGIN INSERT OR IGNORE INTO changed_records VALUES ($row.id); END',
+      );
+    }
+    await _db.customStatement('DELETE FROM changed_records');
+    _groupId = const Uuid().v4();
+    try {
+      await _db.transaction(action);
+    } finally {
+      _groupId = null;
+    }
+    final ids = await _db.customSelect('SELECT id FROM changed_records').get();
+    for (final id in ids) {
+      changed.add(id.read<String>('id'));
+    }
+    if (changed.isEmpty) return;
+    for (final id in changed) {
+      final row = await _db
+          .customSelect(
+            'SELECT * FROM records WHERE id=?',
+            variables: [Variable<String>(id)],
+          )
+          .getSingleOrNull();
+      if (row == null) {
+        _byId.remove(id);
+        continue;
+      }
+      _byId[id] = {
+        'id': id,
+        'kind': row.read<String>('kind'),
+        'payload': jsonDecode(row.read<String>('payload')),
+        'revision': row.read<int>('revision'),
+        'dirty': row.read<int>('dirty'),
+        'baseRevision': row.read<int>('base_revision'),
+        'groupId': row.readNullable<String>('group_id'),
+      };
+    }
+    _records = _byId.values.toList();
+    _index();
+    if (notify) {
+      _cachedStockMap = null;
+      _cachedPaidMap = null;
+      _cachedCustomerBalances = null;
+      _cachedMovementsWithProducts = null;
+      _cachedCategories = null;
+      notifyListeners();
+    }
+    syncStatus.notifyListeners();
+    if (localEdit && pendingCount > 0) syncChanges.notifyListeners();
+  });
 
   String? get boundOwner =>
       _kind('local')
@@ -224,7 +383,8 @@ class AppStore extends ChangeNotifier {
 
   double paidFor(String invoiceId) => allPaidMap[invoiceId] ?? 0.0;
   double dueFor(String invoiceId) {
-    final invoice = invoices.firstWhere((i) => i['id'] == invoiceId);
+    final invoice = _invoicesById[invoiceId];
+    if (invoice == null) throw ArgumentError('Invoice not found.');
     if (invoice['cancelled'] == true) return 0;
     return (paise(invoice['total'] as num) - paise(paidFor(invoiceId))) / 100;
   }
@@ -234,18 +394,20 @@ class AppStore extends ChangeNotifier {
         ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
 
   List<Map<String, dynamic>> get allMovementsWithProducts {
-    if (_cachedMovementsWithProducts != null) return _cachedMovementsWithProducts!;
+    if (_cachedMovementsWithProducts != null)
+      return _cachedMovementsWithProducts!;
     final prodMap = {for (final p in products) p['id']: p};
-    return _cachedMovementsWithProducts = movements.map((m) {
-      final p = prodMap[m['productId']];
-      return {
-        ...m,
-        'productName': p?['name'] ?? 'Custom / Deleted item',
-        'productUnit': p?['unit'] ?? 'pcs',
-        'productCode': p?['code'] ?? '',
-      };
-    }).toList()
-      ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
+    return _cachedMovementsWithProducts =
+        movements.map((m) {
+            final p = prodMap[m['productId']];
+            return {
+              ...m,
+              'productName': p?['name'] ?? 'Custom / Deleted item',
+              'productUnit': p?['unit'] ?? 'pcs',
+              'productCode': p?['code'] ?? '',
+            };
+          }).toList()
+          ..sort((a, b) => '${b['createdAt']}'.compareTo('${a['createdAt']}'));
   }
 
   List<Map<String, dynamic>> get customerBalances {
@@ -353,13 +515,25 @@ class AppStore extends ChangeNotifier {
     }
     return trimmed
         .split(RegExp(r'\s+'))
-        .map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}')
+        .map(
+          (w) => w.isEmpty
+              ? ''
+              : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
+        )
         .join(' ');
   }
 
-  Future<void> saveSettings(Map<String, dynamic> value) => _commit(
-    () => _put('settings', {...settings, ...value, 'id': 'shop-settings'}),
-  );
+  Future<void> saveSettings(Map<String, dynamic> value) => _commit(() async {
+    final merged = {...settings, ...value};
+    final connection = <String, dynamic>{'id': 'cloud-config'};
+    for (final key in ['supabaseUrl', 'supabaseAnonKey', 'supabaseShopToken']) {
+      if (merged.containsKey(key)) connection[key] = merged.remove(key);
+    }
+    if (connection.length > 1) await _put('local', connection, dirty: false);
+    await _put('settings', {...merged, 'id': 'shop-settings'});
+  });
+  Map<String, dynamic> get invoiceShop =>
+      {...settings}..removeWhere((k, v) => k.startsWith('supabase'));
   Future<void> saveProduct(
     Map<String, dynamic> product, {
     num openingStock = 0,
@@ -420,6 +594,8 @@ class AppStore extends ChangeNotifier {
 
   Future<void> saveDraft(Map<String, dynamic> value) => _commit(
     () => _put('draft', {...value, 'id': 'cart-draft'}, dirty: false),
+    notify: false,
+    localEdit: false,
   );
   Future<Map<String, dynamic>> finalizeInvoice({
     required List<Map<String, dynamic>> lines,
@@ -481,7 +657,7 @@ class AppStore extends ChangeNotifier {
             '${fy.toString().substring(2)}-${deviceId.replaceAll('-', '').substring(0, 8).toUpperCase()}-${counter.toString().padLeft(5, '0')}',
         'createdAt': now.toIso8601String(),
         'customer': savedCustomer,
-        'shop': settings,
+        'shop': invoiceShop,
         'discount': discount,
         'gstEnabled': gstEnabled,
         'taxInclusive': taxInclusive,
@@ -530,7 +706,8 @@ class AppStore extends ChangeNotifier {
       throw ArgumentError('Cancelled invoices cannot be edited.');
     }
 
-    final discountToUse = discount ??
+    final discountToUse =
+        discount ??
         (invoice['discount'] as Map?)?.cast<String, dynamic>() ??
         {'type': 'amount', 'value': 0};
 
@@ -544,13 +721,15 @@ class AppStore extends ChangeNotifier {
 
     Map<String, dynamic> updated = {};
     await _commit(() async {
-      final oldMovements =
-          movements.where((m) => m['invoiceId'] == invoiceId).toList();
+      final oldMovements = movements
+          .where((m) => m['invoiceId'] == invoiceId)
+          .toList();
       for (final m in oldMovements) {
-        await _db.customStatement(
-          'DELETE FROM records WHERE id = ?',
-          [m['id']],
-        );
+        await _put('movement', {
+          ...m,
+          'deleted': true,
+          'deletedAt': DateTime.now().toIso8601String(),
+        });
       }
 
       for (final line in lines) {
@@ -600,7 +779,8 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> cancelInvoice(String invoiceId, String reason) async {
-    final invoice = invoices.firstWhere((i) => i['id'] == invoiceId);
+    final invoice = _invoicesById[invoiceId];
+    if (invoice == null) throw ArgumentError('Invoice not found.');
     if (invoice['cancelled'] == true || reason.trim().isEmpty) {
       throw ArgumentError(
         'Enter a reason; cancelled invoices cannot be cancelled again.',
@@ -644,10 +824,12 @@ class AppStore extends ChangeNotifier {
     );
     await _commit(() async {
       final nowStr = DateTime.now().toIso8601String();
-      final relatedMovements =
-          movements.where((m) => m['invoiceId'] == invoiceId).toList();
-      final relatedPayments =
-          payments.where((p) => p['invoiceId'] == invoiceId).toList();
+      final relatedMovements = movements
+          .where((m) => m['invoiceId'] == invoiceId)
+          .toList();
+      final relatedPayments = payments
+          .where((p) => p['invoiceId'] == invoiceId)
+          .toList();
 
       if (relatedMovements.isEmpty && invoice['cancelled'] != true) {
         final lines = (invoice['lines'] as List?) ?? [];
@@ -714,109 +896,79 @@ class AppStore extends ChangeNotifier {
   bool get isInitialSyncDone =>
       _kind('local').any((r) => r['id'] == 'cloud-initial-sync-done');
 
-  Future<void> markInitialSyncDone() async {
-    await _db.customStatement(
-      'INSERT INTO records (id,kind,payload,revision,dirty) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
-      [
-        'cloud-initial-sync-done',
-        'local',
-        jsonEncode({'id': 'cloud-initial-sync-done', 'value': true}),
-        1,
-        0,
-      ],
-    );
-    final idx = _records.indexWhere((r) => r['id'] == 'cloud-initial-sync-done');
-    final entry = {
+  Future<void> markInitialSyncDone() => _commit(
+    () => _put('local', {
       'id': 'cloud-initial-sync-done',
-      'kind': 'local',
-      'payload': {'id': 'cloud-initial-sync-done', 'value': true},
-      'revision': 1,
-      'dirty': 0,
-      'baseRevision': 0,
-    };
-    if (idx >= 0) {
-      _records[idx] = entry;
-    } else {
-      _records.add(entry);
-    }
-  }
-
+      'value': true,
+    }, dirty: false),
+    notify: false,
+    localEdit: false,
+  );
   int get syncCursor =>
-      (_kind('local').firstWhere(
-            (r) => r['id'] == 'cloud-sync-cursor',
-            orElse: () => {},
-          )['value'] as num?)
-          ?.toInt() ??
-      0;
+      (_byId['cloud-sync-cursor']?['payload']['value'] as num?)?.toInt() ?? 0;
+  Future<void> setSyncCursor(int cursor) => _commit(
+    () async {
+      if (cursor > syncCursor)
+        await _put('local', {
+          'id': 'cloud-sync-cursor',
+          'value': cursor,
+        }, dirty: false);
+    },
+    notify: false,
+    localEdit: false,
+  );
+  Future<void> resetSyncCursor() => _commit(
+    () => _db.customStatement(
+      "DELETE FROM records WHERE id IN ('cloud-sync-cursor','cloud-initial-sync-done')",
+    ),
+    notify: false,
+    localEdit: false,
+  );
 
-  Future<void> setSyncCursor(int cursor) async {
-    await _db.customStatement(
-      'INSERT INTO records (id,kind,payload,revision,dirty) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',
-      [
-        'cloud-sync-cursor',
-        'local',
-        jsonEncode({'id': 'cloud-sync-cursor', 'value': cursor}),
-        1,
-        0,
-      ],
-    );
-    final idx = _records.indexWhere((r) => r['id'] == 'cloud-sync-cursor');
-    final entry = {
-      'id': 'cloud-sync-cursor',
-      'kind': 'local',
-      'payload': {'id': 'cloud-sync-cursor', 'value': cursor},
-      'revision': 1,
-      'dirty': 0,
-      'baseRevision': 0,
+  List<Map<String, dynamic>> exportSyncRecords() {
+    final blocked = conflicts.map((c) => c['recordId']).toSet();
+    final blockedGroups = {
+      for (final id in blocked)
+        if (_byId[id]?['groupId'] != null) _byId[id]!['groupId'],
     };
-    if (idx >= 0) {
-      _records[idx] = entry;
-    } else {
-      _records.add(entry);
-    }
+    return _records
+        .where(
+          (r) =>
+              r['dirty'] == 1 &&
+              !['local', 'draft', 'conflict'].contains(r['kind']) &&
+              !blocked.contains(r['id']) &&
+              !blockedGroups.contains(r['groupId']),
+        )
+        .map(
+          (r) => {
+            'id': r['id'],
+            'kind': r['kind'],
+            'payload': _copy(r['payload']),
+            'revision': r['revision'],
+            'baseRevision': r['baseRevision'],
+            'groupId': r['groupId'] ?? r['id'],
+          },
+        )
+        .toList();
   }
 
-  Future<void> resetSyncCursor() async {
-    await _db.customStatement(
-      "DELETE FROM records WHERE id IN ('cloud-sync-cursor', 'cloud-initial-sync-done')",
-    );
-    _records.removeWhere(
-      (r) =>
-          r['id'] == 'cloud-sync-cursor' || r['id'] == 'cloud-initial-sync-done',
-    );
-  }
-
-
-  List<Map<String, dynamic>> exportSyncRecords() => _records
-      .where(
-        (r) =>
-            r['dirty'] == 1 &&
-            !['local', 'draft', 'conflict'].contains(r['kind']),
-      )
-      .map(
-        (r) => {
-          'id': r['id'],
-          'kind': r['kind'],
-          'payload': r['payload'],
-          'revision': r['revision'],
-          'baseRevision': r['baseRevision'],
-        },
-      )
-      .toList();
-  Future<void> acknowledgeSync(List records) => _commit(() async {
-    for (final record in records) {
-      if (record is Map) {
+  Future<void> acknowledgeSync(List records) => _commit(
+    () async {
+      for (final record in records.whereType<Map>()) {
         await _db.customStatement(
-          'UPDATE records SET base_revision=?, dirty=CASE WHEN revision=? THEN 0 ELSE dirty END WHERE id=?',
+          'UPDATE records SET base_revision=MAX(base_revision,?), dirty=CASE WHEN revision=? THEN 0 ELSE dirty END WHERE id=? AND base_revision<=?',
           [
             record['serverRevision'] ?? record['revision'],
             record['revision'],
             record['id'],
+            record['serverRevision'] ?? record['revision'],
           ],
         );
       }
-    }
-  });
+    },
+    notify: false,
+    localEdit: false,
+  );
   static bool _deepEquals(dynamic a, dynamic b) {
     if (identical(a, b)) return true;
     if (a == null || b == null) return a == b;
@@ -850,83 +1002,61 @@ class AppStore extends ChangeNotifier {
         'customer',
         'settings',
         'cancellation',
-      ].contains(record['kind'])) {
+      ].contains(record['kind']))
         continue;
-      }
       final payload = Map<String, dynamic>.from(record['payload'] as Map);
-      if (payload['id'] != record['id']) {
+      final revision =
+          (record['serverRevision'] ?? record['revision'] ?? 1) as int;
+      if (payload['id'] != record['id'] || revision < 1)
         throw FormatException('Invalid sync record.');
-      }
       final local = await _db
           .customSelect(
             'SELECT * FROM records WHERE id=?',
-            variables: [Variable<String>(record['id'] as String)],
+            variables: [Variable<String>(record['id'])],
           )
           .getSingleOrNull();
-
       if (local != null) {
-        Map<String, dynamic>? localPayload;
-        try {
-          localPayload = Map<String, dynamic>.from(
-            jsonDecode(local.read<String>('payload')) as Map,
-          );
-        } catch (_) {}
-
-        if (localPayload != null && _deepEquals(localPayload, payload)) {
-          await _db.customStatement(
-            'UPDATE records SET base_revision=? WHERE id=?',
-            [record['revision'] ?? 1, record['id']],
-          );
+        final base = local.read<int>('base_revision');
+        final current = Map<String, dynamic>.from(
+          jsonDecode(local.read<String>('payload')),
+        );
+        if (revision < base || (revision == base && record['conflict'] != true))
+          continue;
+        if (_deepEquals(current, payload)) {
+          if (revision > base)
+            await _db.customStatement(
+              'UPDATE records SET base_revision=? WHERE id=?',
+              [revision, record['id']],
+            );
           continue;
         }
-
-        if (local.read<int>('dirty') == 1) {
-          await _put('conflict', {
+        if (local.read<int>('dirty') == 1 ||
+            (current['deleted'] == true && payload['deleted'] != true)) {
+          final conflict = {
             'id': 'conflict-${record['id']}',
             'recordId': record['id'],
-            'local': localPayload ?? jsonDecode(local.read<String>('payload')),
+            'local': current,
             'remote': record,
-            'createdAt': DateTime.now().toIso8601String(),
-          }, dirty: false);
+          };
+          final previous = _byId[conflict['id']]?['payload'];
+          if (!_deepEquals(previous, conflict))
+            await _put('conflict', conflict, dirty: false);
           continue;
         }
       }
-
+      // Keep the client mutation counter monotonic: server revisions are separate.
       await _put(
-        record['kind'] as String,
+        record['kind'],
         payload,
         dirty: false,
-        revision: record['revision'] as int? ?? 1,
+        revision: local?.read<int>('revision') ?? 1,
       );
       await _db.customStatement(
         'UPDATE records SET base_revision=? WHERE id=?',
-        [record['revision'] ?? 1, record['id']],
+        [revision, record['id']],
       );
-
-      // When an invoice is remotely deleted, also ensure all local movements and payments for that invoice are tombstoned
-      if (record['kind'] == 'invoice' && payload['deleted'] == true) {
-        final nowStr = DateTime.now().toIso8601String();
-        final localMovs =
-            movements.where((m) => m['invoiceId'] == record['id']).toList();
-        for (final m in localMovs) {
-          await _put('movement', {
-            ...m,
-            'deleted': true,
-            'deletedAt': nowStr,
-          }, dirty: false);
-        }
-        final localPmts =
-            payments.where((p) => p['invoiceId'] == record['id']).toList();
-        for (final p in localPmts) {
-          await _put('payment', {
-            ...p,
-            'deleted': true,
-            'deletedAt': nowStr,
-          }, dirty: false);
-        }
-      }
     }
-  });
+  }, localEdit: false);
   Future<void> resolveConflict(
     String conflictId, {
     required bool useRemote,

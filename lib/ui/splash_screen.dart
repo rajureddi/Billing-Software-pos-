@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../data/app_store.dart';
 import 'branding.dart';
-import 'common.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.store});
@@ -18,7 +20,8 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
+  late Animation<double> _blurAnimation;
+  late Animation<double> _slideAnimation;
   Timer? _timer;
 
   @override
@@ -26,20 +29,36 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1600),
     );
     _fadeAnimation = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeInOut,
+      curve: const Interval(0.2, 1.0, curve: Curves.easeOut),
     );
-    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
+    _blurAnimation = Tween<double>(begin: 40.0, end: 12.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 1.0, curve: Curves.easeOutExpo),
+      ),
+    );
+    _slideAnimation = Tween<double>(begin: 20.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.2, 1.0, curve: Curves.easeOutCubic),
+      ),
     );
     _controller.forward();
 
-    _timer = Timer(const Duration(milliseconds: 1800), () {
+    _timer = Timer(const Duration(milliseconds: 2500), () {
       if (mounted) {
-        context.go('/dashboard');
+        try {
+          final user = Supabase.instance.client.auth.currentUser;
+          if (user != null) {
+            context.go('/dashboard');
+            return;
+          }
+        } catch (_) {}
+        context.go('/login');
       }
     });
   }
@@ -54,89 +73,134 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Center(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: ScaleTransition(
-              scale: _scaleAnimation,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(),
-                  // SRS Logo with glowing shadow
-                  Container(
-                    width: 140,
-                    height: 140,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFC42B2B).withValues(alpha: 0.18),
-                          blurRadius: 36,
-                          spreadRadius: 8,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: srsLogoWidget(size: 140, radius: 70, showBorder: false),
-                  ),
-                  const SizedBox(height: 28),
-
-                  // Brand Name
-                  const Text(
-                    'SRS AGENCIES',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -0.5,
-                      color: ink,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-
-                  // Tagline
-                  const Text(
-                    'HARDWARE & BUILDING MATERIALS',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                      color: Color(0xFFC42B2B),
-                    ),
-                  ),
-                  const Spacer(),
-
-                  // Bottom subtle loader
-                  SizedBox(
-                    width: 120,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: const LinearProgressIndicator(
-                        minHeight: 3,
-                        backgroundColor: Color(0xFFEEEEEE),
-                        valueColor:
-                            AlwaysStoppedAnimation<Color>(Color(0xFFC42B2B)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Offline-Ready Retail Billing System',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: muted,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+      backgroundColor: const Color(0xFFF7F7F8), // Subtle off-white base
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background abstract element (very subtle)
+          Positioned(
+            top: -100,
+            right: -100,
+            child: Container(
+              width: 400,
+              height: 400,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.blueGrey.withOpacity(0.05),
               ),
             ),
           ),
-        ),
+          
+          Center(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, child) {
+                return Opacity(
+                  opacity: _fadeAnimation.value,
+                  child: Transform.translate(
+                    offset: Offset(0, _slideAnimation.value),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(32),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(
+                          sigmaX: _blurAnimation.value,
+                          sigmaY: _blurAnimation.value,
+                        ),
+                        child: Container(
+                          width: 320,
+                          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 32),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(32),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.5),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 40,
+                                offset: const Offset(0, 20),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Sleek logo presentation
+                              srsLogoWidget(
+                                size: 100,
+                                radius: 24,
+                                showBorder: false,
+                              ),
+                              const SizedBox(height: 32),
+                              
+                              // Brand typography (Editorial aesthetic)
+                              const Text(
+                                'SRS AGENCIES',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w400,
+                                  letterSpacing: 4.0,
+                                  color: Color(0xFF1C1C1E),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              
+                              Container(
+                                height: 1,
+                                width: 40,
+                                color: Colors.black.withOpacity(0.1),
+                              ),
+                              
+                              const SizedBox(height: 16),
+                              
+                              const Text(
+                                'Hardware & Building Materials',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 2.0,
+                                  color: Color(0xFF8E8E93),
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          // Subtle loading indicator at bottom
+          Positioned(
+            bottom: 60,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: FadeTransition(
+                opacity: _fadeAnimation,
+                child: Column(
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      child: LinearProgressIndicator(
+                        minHeight: 1,
+                        backgroundColor: Colors.black.withOpacity(0.05),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1C1C1E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
