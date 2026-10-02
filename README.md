@@ -353,6 +353,6 @@ billing_software/
 ## 👥 Author & Maintenance
 
 - **Author**: RAJU REDDY
-- **Email id **: rajubandam694@gmail.com
+- **Email id**: rajubandam694@gmail.com
 - **Primary Use**: Retail Billing & Multi-Device Inventory Management (POS)
 - **Give Some Credits**
