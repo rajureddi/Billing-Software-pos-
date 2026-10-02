@@ -59,7 +59,14 @@ Engineered to operate seamlessly without an active internet connection, while pr
 ### 5. Settings & Cloud Sync
 - **Shop Profile**: Business name, category, phone number, physical address, and GSTIN.
 - **Printer Configuration**: Select thermal roll width (58mm / 80mm) or sheet sizes (A4 / A5).
-- **Cloud Account**: Secure Supabase integration for multi-device data replication across devices.
+- **Cloud Account**: Real-time Supabase integration with automatic background sync and 1-tap manual sync.
+
+### 6. Authentication & Multi-Tenant Onboarding
+- **Multi-Tenant Shop Isolation**: Physical data separation at both layers:
+  - *Offline Layer*: Dynamic SQLite database files per shop (`counterday_${user.id}.sqlite`).
+  - *Cloud Layer*: Scoped PostgreSQL queries with compound primary keys `(shop_id, kind, id)` and Row Level Security. Shop A can never view or overwrite Shop B's records.
+- **Flexible Identifier (User ID or Email)**: Register and log in using either a standard email (`owner@store.com`) or a plain user ID/username (`raju`, `shop101`). Identifiers are automatically formatted and validated.
+- **3-Step Instant Onboarding**: Fast onboarding wizard collecting credentials, business information, and tax details, directing immediately to the POS dashboard without email verification roadblocks.
 
 ---
 
@@ -191,29 +198,115 @@ flutter test
 
 ---
 
+## 🎨 White-Labeling & Customization Guide
+
+If you want to rebrand or customize this POS application for a different business, client, or store, follow the guide below:
+
+### 1. App Logo & Brand Identity
+
+| Asset / File | File Path | Description |
+|---|---|---|
+| **Logo Image File** | [`assets/images/srs_logo.jpg`](file:///assets/images/srs_logo.jpg) | Main logo image used across the splash screen, navigation header, and landing page. Replace this file with your logo (PNG, JPG, or WebP). |
+| **Brand Widget & Tokens** | [`lib/ui/branding.dart`](file:///lib/ui/branding.dart) | Contains `srsLogoWidget()` which controls the logo's dimensions, border radii, shadows, and fallback typography if the image fails to load. |
+| **Brand Titles & Subtitles** | [`lib/ui/branding.dart`](file:///lib/ui/branding.dart#L4-L6) | Edit `appTitle`, `appTagline`, and `appSubtitle` to change the global brand strings displayed in headers and PDFs. |
+
+> **Tip**: If you use a different image name or extension (e.g. `assets/images/my_logo.png`), make sure it is registered in [`pubspec.yaml`](file:///pubspec.yaml) under `flutter: assets:` and updated on line 35 of [`lib/ui/branding.dart`](file:///lib/ui/branding.dart).
+
+---
+
+### 2. Splash / Loading Screen Customization
+
+The animated loading screen is completely modular and can be customized in [`lib/ui/splash_screen.dart`](file:///lib/ui/splash_screen.dart):
+
+- **Display Duration**:
+  In `initState()` (around line 50), adjust the timer duration:
+  ```dart
+  _timer = Timer(const Duration(milliseconds: 2500), () { ... });
+  ```
+- **Animations & Easing**:
+  Modify `_fadeAnimation`, `_blurAnimation`, or `_slideAnimation` in [`splash_screen.dart`](file:///lib/ui/splash_screen.dart#L28-L48) to tweak animation curves, blur radius, or slide offsets.
+- **Brand Title & Tagline on Splash**:
+  Around line 139, customize the text widgets:
+  ```dart
+  const Text('YOUR SHOP NAME', style: TextStyle(...)),
+  const Text('RETAIL & WHOLESALE BILLING', style: TextStyle(...)),
+  ```
+- **Background & Backdrop Filter**:
+  Around line 68, modify the background `Scaffold` color, subtle gradient circles, or glassmorphic blur card container.
+
+---
+
+### 3. Native Platform Launcher Icons & Favicons
+
+To update the launcher icon shown on device home screens and title bars:
+
+- **Android Launcher Icons**: Replace the icon images in:
+  - `android/app/src/main/res/mipmap-mdpi/ic_launcher.png` (48x48)
+  - `android/app/src/main/res/mipmap-hdpi/ic_launcher.png` (72x72)
+  - `android/app/src/main/res/mipmap-xhdpi/ic_launcher.png` (96x96)
+  - `android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png` (144x144)
+  - `android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png` (192x192)
+- **Android Native Splash Screen**:
+  - `android/app/src/main/res/drawable/launch_background.xml`
+  - `android/app/src/main/res/drawable-v21/launch_background.xml`
+- **Windows Desktop Executable Icon**:
+  - Replace `windows/runner/resources/app_icon.ico` with your Windows icon file.
+- **Web Browser Favicon & PWA Icons**:
+  - Replace `web/favicon.png` with your 32x32 favicon.
+  - Replace `web/icons/Icon-192.png` and `web/icons/Icon-512.png` for PWA home screen pinning.
+
+---
+
+### 4. Default Store Configuration & Settings
+
+To change the default shop profile, tax preferences, and receipt footer for fresh installations:
+
+Open [`lib/data/app_store.dart`](file:///lib/data/app_store.dart#L134) and customize the `defaultSettings` map:
+```dart
+static Map<String, dynamic> get defaultSettings => {
+  'name': 'My Store',                                         // Store name
+  'tagline': 'Retail & Billing',                             // Subtitle
+  'category': 'General Retail',                              // Business category
+  'address': '123 Market Street, City',                      // Store address
+  'phone': '+91 98765 43210',                                // Phone number
+  'footer': '1. Goods once sold cannot be returned. ...',   // Receipt terms
+  'paper': 'A4',                                             // Default print format ('A4', 'A5', '58mm', '80mm')
+  'gstEnabled': false,                                       // Enable GST calculation by default
+};
+```
+
+---
+
 ## 📁 Directory Structure
 
 ```text
 billing_software/
-├── android/               # Android native configuration & icons
-├── assets/images/         # Branding assets (SRS logo, app icons)
+├── android/               # Android native configuration, splash & launcher icons
+├── assets/images/         # Branding assets (srs_logo.jpg, app logos)
 ├── lib/
-│   ├── data/              # Local storage, schema, AppStore state
+│   ├── data/              # Storage engines, multi-tenant SQLite & AppStore
+│   │   ├── app_config.dart    # Environment config, auth email normalizer
+│   │   └── app_store.dart     # Scoped SQLite database, billing actions, defaults
 │   ├── domain/            # Billing math, GST calculations, discount logic
 │   ├── services/          # Cloud sync (Supabase), PDF invoice generator
 │   ├── ui/                # User interface screens & widgets
 │   │   ├── app.dart           # App shell, theme, navigation & top bar
-│   │   ├── branding.dart      # Official logo widget & brand tokens
+│   │   ├── branding.dart      # Logo widget, color tokens, branding strings
 │   │   ├── common.dart        # Reusable UI widgets & UnitSelector
 │   │   ├── dashboard.dart     # Sales metrics, quick actions & alerts
 │   │   ├── inventory.dart     # Product catalog, stock receiving modal
 │   │   ├── invoices.dart      # Invoices history, customer balances ledger
 │   │   ├── landing_page.dart  # Company overview & module portal
+│   │   ├── login_page.dart    # Secure login with User ID or Email
+│   │   ├── onboarding_page.dart # 3-Step shop setup & multi-tenant onboarding
 │   │   ├── pos.dart           # Point of sale checkout & custom item modal
 │   │   ├── settings.dart      # Shop profile, printer settings, cloud sync
-│   │   └── splash_screen.dart # Animated branded launch screen
-│   └── main.dart          # Application entry point
+│   │   └── splash_screen.dart # Animated launch screen with auto-routing
+│   └── main.dart          # Application bootstrap & session recovery
+├── supabase/migrations/   # SQL migrations for multi-tenant isolation & RLS
 ├── test/                  # Automated unit and integration test suite
+├── vercel-build.sh        # Vercel CI/CD compile script with compile-time defines
+├── vercel.json            # Vercel deployment routes and SPA rewrites
 ├── web/                   # Web host configuration & favicons
 ├── windows/               # Windows desktop runner & resources
 └── pubspec.yaml           # Dependencies and asset registrations
@@ -223,6 +316,5 @@ billing_software/
 
 ## 👥 Author & Maintenance
 
-- **Shop**: SRS AGENCIES
 - **Repository**: [https://github.com/rajureddi/Billing-Software-pos-.git](https://github.com/rajureddi/Billing-Software-pos-.git)
-- **Primary Use**: Retail Billing & Wholesale Supply Management (Cement, Plumbing, Steel & Hardware)
+- **Primary Use**: Retail Billing & Multi-Device Inventory Management (POS)
