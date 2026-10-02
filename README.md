@@ -6,7 +6,7 @@
 ![Offline First](https://img.shields.io/badge/Offline--First-100%25%20Local%20Storage-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)
 
-A high-speed, modern, **offline-first Point of Sale (POS) and inventory management application** tailored specifically for hardware stores, building materials suppliers (Cement, Iron & Steel, Plumbing, Paints, Electricals), and retail shops.
+A high-speed, modern, **offline-first Point of Sale (POS) and Multi Sync across every devices  and  inventory management application** tailored specifically for hardware stores, building materials suppliers (Cement, Iron & Steel, Plumbing, Paints, Electricals), and retail shops.
 
 Engineered to operate seamlessly without an active internet connection, while providing optional multi-device cloud synchronization via Supabase for shop owners managing billing across tablets, mobile phones, and Windows desktop counters.
 
@@ -352,5 +352,7 @@ billing_software/
 
 ## 👥 Author & Maintenance
 
-- **Repository**: [https://github.com/rajureddi/Billing-Software-pos-.git](https://github.com/rajureddi/Billing-Software-pos-.git)
+- **Author**: RAJU REDDY
+- **Email id **: rajubandam694@gmail.com
 - **Primary Use**: Retail Billing & Multi-Device Inventory Management (POS)
+- **Give Some Credits**
