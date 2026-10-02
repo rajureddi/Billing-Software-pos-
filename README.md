@@ -30,6 +30,42 @@ Engineered to operate seamlessly without an active internet connection, while pr
 
 ---
 
+## 📸 Application Screenshots & UI Showcase
+
+Explore the clean, modern, and industrial user interface of the application:
+
+### 1. Real-Time Business Dashboard
+![Dashboard Overview](docs/screenshots/dashboard_overview.png)
+- **Financial Performance Pulse**: At-a-glance KPI cards tracking **Total Sales**, **Payments Received**, **Customer Credit Dues**, and **Catalog Products**.
+- **Real-Time Cloud Synchronization**: Dynamic status pill showing active direct multi-device sync with timestamp and a 1-tap manual sync button.
+- **Stock Shortage Intelligence**: Proactive alert system warning store owners when sales exceed physical recorded stock with a direct review link.
+- **Quick Action Bar**: Fast 1-click triggers to start a **New Bill**, **Add Product**, **Add Stock**, or **Record Payment**.
+- **Offline Reliability Badge**: Displays persistent offline readiness indicating all records are safely saved locally on device SQLite.
+
+### 2. Point of Sale (POS) Checkout Counter
+![Point of Sale](docs/screenshots/pos_checkout_counter.png)
+- **Visual Product Grid**: Interactive hardware catalog cards displaying item photos, current stock indicators, pricing, and rapid increment/decrement controls.
+- **Category Filter Chips**: 1-tap instant category filtering (*Cement*, *Fasteners*, *Iron & Steel*, *Paint & Finish*, *Plumbing*).
+- **Persistent Cart Drawer**: Real-time invoice staging displaying selected items, unit prices, quantity multipliers, and line-item discount controls (`+ Disc`).
+- **Rapid Keyboard Workflow**: Supports power-user shortcuts (`F1` for custom/loose items, `F2` for instant checkout, `Esc` to clear).
+- **Customer Assignment**: 1-click walk-in customer selection or customer account search for credit billing.
+
+### 3. Invoices Register & Customer Ledger
+![Invoices and Customer Dues](docs/screenshots/invoices_customer_dues.png)
+- **Comprehensive Invoice History**: Filter invoices by *All*, *Unpaid*, *Paid*, *Cancelled*, or custom *Date range*.
+- **Instant Search**: Search records in real-time by invoice number or customer name.
+- **Status & Details**: Clear visibility of unique invoice IDs, generation timestamps, gross amounts, and payment status badges.
+- **Customer Balances Toggle**: Fast one-click toggle to view customer accounts with outstanding balances and record collections.
+
+### 4. Interactive Invoice Inspection & Printing Modal
+![Invoice Detail Modal](docs/screenshots/invoice_detail_modal.png)
+- **Itemized Bill Breakdown**: Comprehensive breakdown of products, itemized rates, quantities, and gross totals.
+- **Multi-Format Print Engine**: Instant format switcher supporting **Standard A4**, **A5**, and **58mm / 80mm Thermal Receipt Printers**.
+- **Direct PDF Export & Sharing**: One-tap triggers to **Preview**, **Save PDF**, and **Print Invoice**.
+- **Safe Invoice Deletion & Restoration**: Deleting an invoice automatically reverses inventory deductions, restoring physical stock back to the catalog.
+
+---
+
 ## 📱 Modules & Features
 
 ### 1. Dashboard
